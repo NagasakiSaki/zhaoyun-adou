@@ -9,6 +9,26 @@ window.CONFIG = {
   BENCH_SIZE: 5,
   MAX_LV: 5,
   lvMul: function (lv) { return Math.pow(2.1, lv - 1); },
+  // 武将等级（拖同字碎片上武将军升级）
+  GEN_MAX_LV: 5,
+  GEN_LV_DMG_MUL: function (lv) { return Math.pow(1.5, lv - 1); },
+  GEN_LV_ITV_MUL: function (lv) { return Math.pow(0.85, lv - 1); },
+
+  // 金手指默认设置（可被 meta.cheat 覆盖）
+  CHEAT_DEFAULT: {
+    enabled: false,
+    startMantou: null,     // 覆盖开局馒头
+    recruitFree: false,    // 征兵免费
+    recruitSoldier: null,  // 抽卡权重覆盖
+    recruitFrag: null,
+    recruitShovel: null,
+    soldierLv: null,       // 新抽士兵等级
+    dmgMul: 1,             // 己方伤害倍率
+    enemyHpMul: 1,         // 敌方血量倍率
+    hearts: null,          // 阿斗红心
+    offlineMul: 1,         // 挂机速度倍率
+    waveBonusMul: 1        // 波次馒头倍率
+  },
 
   // 阿斗红心：漏过一个敌人扣一颗，先掉光的一方落败
   HEARTS: 5,

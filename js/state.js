@@ -1,4 +1,4 @@
-/* state.js —— 中心状态 + 全部玩法动作（数据流唯一写入口） */
+/* state.js —— 中心状态 + 玩法动作（拖拽放置 / 整手征兵 / 铲子 / 结算 / 金手指） */
 Game.State = (function () {
   var CONFIG = window.CONFIG, DATA = window.DATA, U = window.Game.Utils;
   var state = {
@@ -7,7 +7,8 @@ Game.State = (function () {
     screen: 'home',
     mode: null,
     battle: null,
-    offlineGain: 0
+    offlineGain: 0,
+    drag: null
   };
 
   /* ================= 每日轮换 / 商人 ================= */
@@ -56,7 +57,8 @@ Game.State = (function () {
     var elapsedMin = (Date.now() - state.meta.offlineTS) / 60000;
     if (elapsedMin >= CONFIG.OFFLINE.minMinutes) {
       var cap = Math.min(CONFIG.OFFLINE.capMin, Math.floor(elapsedMin));
-      state.offlineGain = Math.max(1, Math.floor(cap * CONFIG.OFFLINE.coinsPerMin));
+      var mul = Game.Cheat ? Game.Cheat.offlineMul(state.meta) : 1;
+      state.offlineGain = Math.max(1, Math.floor(cap * CONFIG.OFFLINE.coinsPerMin * mul));
     } else state.offlineGain = 0;
     Game.Save.touchOffline(state.meta);
     Game.Audio.setEnabled(!!state.meta.sound);
@@ -72,6 +74,7 @@ Game.State = (function () {
     var b = Game.Battle.setup(mode, mapKey, buff, state.meta, mode === 'campaign' ? stage : 1);
     state.mode = mode;
     state.battle = b;
+    state.drag = null;
     Game.Save.saveMeta(state.meta);
     Game.Save.saveSlot(mode, state.slots[mode]);
     Game.Effects.clear();
@@ -81,11 +84,12 @@ Game.State = (function () {
   function goHome() {
     state.battle = null;
     state.mode = null;
+    state.drag = null;
     Game.Save.touchOffline(state.meta);
     Game.UI.route('home');
   }
 
-  /* ================= 手牌 ================= */
+  /* ================= 征兵 ================= */
   function recruit() {
     var b = state.battle;
     if (!b || b.result) return;
@@ -93,6 +97,84 @@ Game.State = (function () {
     Game.UI.syncBattle(b);
   }
 
+  /* ================= 拖拽 ================= */
+  function beginBenchDrag(idx) {
+    var b = state.battle;
+    if (!b || b.result) return false;
+    var card = b.P.bench[idx];
+    if (!card) return false;
+    b.selCard = -1; b.unlockMode = false; b._shovelIdx = -1;
+    state.drag = { type: 'bench', benchIdx: idx, unit: card, moved: false, x: 0, y: 0 };
+    return true;
+  }
+  function beginUnitDrag(c, r) {
+    var b = state.battle;
+    if (!b || b.result) return false;
+    var k = Game.Battle.key(c, r);
+    var u = b.P.units[k];
+    if (!u) return false;
+    if (b.uiSel && b.uiSel.mode === 'unit') return false;
+    b.selCard = -1;
+    var unit = u;
+    if (u.kind === 'g' && u.half != null) {
+      var frag = Game.Battle.unlinkGeneral(b, b.P, k);
+      if (!frag) return false;
+      unit = frag;
+    }
+    state.drag = { type: 'unit', key: k, unit: unit, moved: false, x: 0, y: 0 };
+    return true;
+  }
+  function updateDrag(x, y) {
+    if (state.drag) { state.drag.moved = true; state.drag.x = x; state.drag.y = y; }
+  }
+  function getDrag() { return state.drag; }
+  // dropTarget: {type:'bench',idx} | {type:'cell',c,r} | {type:'none'}
+  function endDrag(dropTarget) {
+    var d = state.drag;
+    state.drag = null;
+    if (!d) return;
+    var b = state.battle;
+    if (!b) { return; }
+    var fromKey = d.type === 'bench' ? 'b' + d.benchIdx : d.key;
+    if (!dropTarget || dropTarget.type === 'none') {
+      if (d.type === 'unit' && !b.P.units[d.key]) b.P.units[d.key] = d.unit;
+      Game.UI.syncBattle(b);
+      return;
+    }
+    if (dropTarget.type === 'bench') {
+      benchDrop(fromKey, dropTarget.idx);
+    } else if (dropTarget.type === 'cell') {
+      var res = Game.Battle.dropUnit(b, d.unit, fromKey, dropTarget.c, dropTarget.r);
+      if (res === 'fail' && d.type === 'unit' && !b.P.units[d.key]) b.P.units[d.key] = d.unit;
+    }
+    Game.UI.syncBattle(b);
+  }
+
+  function benchDrop(fromKey, toIdx) {
+    var b = state.battle;
+    if (!b) return;
+    var S = b.P;
+    var fromB = fromKey.charAt(0) === 'b' ? +fromKey.slice(5) : -1;
+    var unit = fromB >= 0 ? S.bench[fromB] : S.units[fromKey];
+    if (!unit) return;
+    if (fromB === toIdx) return;
+    var target = S.bench[toIdx];
+    if (!target) {
+      if (fromB >= 0) { S.bench[toIdx] = S.bench[fromB]; S.bench[fromB] = null; }
+      else { S.bench[toIdx] = unit; delete S.units[fromKey]; }
+      return;
+    }
+    if (unit.kind === 's' && target.kind === 's' && unit.ch === target.ch && unit.lv === target.lv && unit.lv < CONFIG.MAX_LV) {
+      target.lv++;
+      if (fromB >= 0) S.bench[fromB] = null; else delete S.units[fromKey];
+      Game.Audio.play('merge');
+      return;
+    }
+    if (fromB >= 0) { S.bench[fromB] = target; S.bench[toIdx] = unit; }
+    else { S.units[fromKey] = target; S.bench[toIdx] = unit; }
+  }
+
+  /* ================= 备战席点击（tap 兜底） ================= */
   function onBenchTap(idx) {
     var b = state.battle;
     if (!b || b.result) return;
@@ -117,13 +199,13 @@ Game.State = (function () {
       Game.UI.syncBattle(b);
       return;
     }
-    if (card.kind === 'f') { Game.UI.toast('碎片需拼字成武将再上阵'); Game.Audio.play('click'); return; }
+    if (card.kind === 'f') { Game.UI.toast('拖动碎片到相邻空地可拼字觉醒武将'); return; }
     b.selCard = (b.selCard === idx) ? -1 : idx;
     b.unlockMode = false; b._shovelIdx = -1;
     Game.UI.syncBattle(b);
   }
 
-  /* ================= 战场点击 ================= */
+  /* ================= 战场点击（tap 兜底） ================= */
   function onStagePointer(pxX, pxY) {
     var b = state.battle;
     if (!b || b.result) return;
@@ -149,7 +231,7 @@ Game.State = (function () {
       return;
     }
     if (b.selCard >= 0) {
-      var res = Game.Battle.placeCard(b, b.selCard, c, r);
+      var res = Game.Battle.dropUnit(b, b.P.bench[b.selCard], 'b' + b.selCard, c, r);
       if (res !== 'fail') b.selCard = -1;
       Game.UI.syncBattle(b);
     }
@@ -170,16 +252,6 @@ Game.State = (function () {
     if (!b || b.result) return;
     Game.Battle.useActiveItem(b, slot);
     Game.UI.syncBattle(b);
-  }
-
-  function combineHero(name) {
-    var b = state.battle;
-    if (!b || b.result) return;
-    if (Game.Battle.combineHero(b, name)) Game.UI.syncBattle(b);
-  }
-  function availableHeroes() {
-    var b = state.battle;
-    return b ? Game.Battle.availableHeroes(b) : [];
   }
 
   /* ================= 商店 ================= */
@@ -210,7 +282,6 @@ Game.State = (function () {
 
   /* ================= 战斗结算 ================= */
   function rollWeaponDrop(b) {
-    // BOSS 掉落：概率 + 品阶随波次提升
     if (Math.random() > 0.5) return;
     var tier = 1;
     var r = Math.random();
@@ -220,7 +291,7 @@ Game.State = (function () {
     var names = Object.keys(DATA.HEROES).map(function (k) { return DATA.HEROES[k].name; });
     var name = U.pick(names);
     var cur = state.meta.weapons[name];
-    if (cur && cur.tier >= tier) return; // 已有更好
+    if (cur && cur.tier >= tier) return;
     var drop = { hero: name, tier: tier, name: DATA.WEAPONS[tier].name };
     b.drops.push(drop);
     state.meta.weapons[name] = { tier: tier, name: drop.name };
@@ -326,15 +397,25 @@ Game.State = (function () {
     Game.UI.syncAll();
   }
 
+  /* ================= 金手指 ================= */
+  function cheatSave(cfg) {
+    state.meta.cheat = cfg;
+    Game.Save.saveMeta(state.meta);
+    Game.UI.syncAll();
+  }
+
   return {
     state: state,
     init: init,
     newRun: newRun,
     goHome: goHome,
     recruit: recruit,
+    beginBenchDrag: beginBenchDrag,
+    beginUnitDrag: beginUnitDrag,
+    updateDrag: updateDrag,
+    endDrag: endDrag,
+    getDrag: getDrag,
     onBenchTap: onBenchTap,
-    combineHero: combineHero,
-    availableHeroes: availableHeroes,
     useActiveItem: useActiveItem,
     buyMerchantItem: buyMerchantItem,
     onBattleEnd: onBattleEnd,
@@ -343,6 +424,7 @@ Game.State = (function () {
     claimOffline: claimOffline,
     onStagePointer: onStagePointer,
     setAvatar: setAvatar,
-    toggleSound: toggleSound
+    toggleSound: toggleSound,
+    cheatSave: cheatSave
   };
 })();

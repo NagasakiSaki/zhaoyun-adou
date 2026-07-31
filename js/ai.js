@@ -82,7 +82,7 @@ Game.AI = (function () {
       var bu = S.bench[bi];
       if (bu && (bu.kind === 's' || bu.kind === 'g')) { hasPlayable = true; break; }
     }
-    if (!hasPlayable && S.mantou >= Game.Battle.recruitCost(S)) {
+    if (!hasPlayable && S.mantou >= Game.Battle.recruitCost(b, S)) {
       Game.Battle.doRecruit(b, S, false);
       return true;
     }

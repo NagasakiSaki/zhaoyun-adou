@@ -283,6 +283,36 @@
   color:var(--ink3);
 }
 
+/* ---------- 金手指 ---------- */
+.cheat-box{
+  background:var(--paper2);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+}
+.cheat-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 0;
+  border-bottom:1px dashed var(--line);
+  font-size:14px;
+}
+.cheat-row:last-child{ border-bottom:none; }
+.cheat-row span{ color:var(--ink2); flex:none; }
+.cheat-row input, .cheat-row select{
+  font-family:var(--font);
+  width:110px;
+  padding:4px 6px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:#fff;
+  color:var(--ink);
+  font-size:14px;
+  text-align:center;
+}
+
 /* ---------- 武将合成提示 ---------- */
 .hero-combine{
   background:linear-gradient(135deg, rgba(201,162,39,.18), rgba(168,59,45,.12));

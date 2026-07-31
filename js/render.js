@@ -187,9 +187,10 @@ Game.Render = (function () {
   function drawTower(b, isPlayer, u, c, r) {
     var p = cellPx(c, r);
     var cell = Math.min(L.cellW, L.cellH);
-    var size = cell * (u.kind === 'g' ? 0.72 : 0.62);
-    var half = size / 2;
     var isHero = u.kind === 'g';
+    var isHalf = isHero && u.half != null;
+    var size = cell * (isHero ? 0.7 : (u.kind === 'f' ? 0.55 : 0.62));
+    var half = size / 2;
     var isGold = isHero || u.kind === 'f';
     var scale = u.attackT > 0 ? 1.15 : 1;
     ctx.save();
@@ -199,23 +200,32 @@ Game.Render = (function () {
     ctx.fillStyle = 'rgba(0,0,0,.12)';
     roundRect(-half + 2, -half + 3, size, size, size * 0.15); ctx.fill();
     // 牌面
-    ctx.fillStyle = isHero ? '#fbe9b8' : (isPlayer ? '#fbf7ec' : '#3a3228');
+    ctx.fillStyle = isGold ? (isHalf ? (u.half === 0 ? '#fbe9b8' : '#f4d98a') : '#fbe9b8') : (isPlayer ? '#fbf7ec' : '#3a3228');
     roundRect(-half, -half, size, size, size * 0.15); ctx.fill();
     ctx.strokeStyle = isGold ? '#b8860b' : (isPlayer ? '#1a1a1a' : '#f5f0e1');
     ctx.lineWidth = isGold ? 2.5 : 2;
     roundRect(-half, -half, size, size, size * 0.15); ctx.stroke();
+    // 半身连接边
+    if (isHalf) {
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (u.half === 0) { ctx.moveTo(half - 2, -half + 4); ctx.lineTo(half - 2, half - 4); }
+      else { ctx.moveTo(-half + 2, -half + 4); ctx.lineTo(-half + 2, half - 4); }
+      ctx.stroke();
+    }
     // 字
-    var label = u.kind === 'g' ? u.name : u.ch;
-    ctx.fillStyle = isHero ? '#7a2a1a' : (isPlayer ? '#1a1a1a' : '#f5f0e1');
-    ctx.font = FONT(size * (isHero ? 0.42 : 0.62), 700);
+    var label = isHero ? (isHalf ? u.ch : u.name) : u.ch;
+    ctx.fillStyle = isGold ? '#7a2a1a' : (isPlayer ? '#1a1a1a' : '#f5f0e1');
+    ctx.font = FONT(size * (isHero ? (isHalf ? 0.55 : 0.42) : 0.62), 700);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, 0, -1);
     // 等级
-    if (u.kind === 's' && u.lv > 1) {
-      ctx.fillStyle = '#8a8a8a';
-      ctx.font = FONT(cell * 0.18, 700);
+    if ((u.kind === 's' && u.lv > 1) || (isHero && (u.lv || 1) > 1)) {
+      ctx.fillStyle = '#b8860b';
+      ctx.font = FONT(cell * 0.17, 700);
       ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillText('Lv' + u.lv, half - cell * 0.05, -half + cell * 0.03);
+      ctx.fillText('Lv' + (u.lv || 1), half - cell * 0.05, -half + cell * 0.03);
     }
     ctx.restore();
   }
@@ -333,8 +343,9 @@ Game.Render = (function () {
 
   function drawHighlights(b) {
     var cell = Math.min(L.cellW, L.cellH);
-    // 部署选中：高亮可放空地
-    if (b.selCard >= 0) {
+    // 部署选中/拖拽中：高亮可放空地
+    var dragging = Game.State.getDrag && Game.State.getDrag();
+    if (b.selCard >= 0 || dragging) {
       for (var i = 0; i < b.buildP.length; i++) {
         var c = b.buildP[i][0], r = b.buildP[i][1];
         if (b.P.units[Game.Battle.key(c, r)]) continue;

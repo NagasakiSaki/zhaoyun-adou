@@ -1,8 +1,9 @@
-/* ui.js —— 屏幕路由 / DOM / HUD / 弹窗 */
+/* ui.js —— 屏幕路由 / 拖拽 / HUD / 弹窗 */
 Game.UI = (function () {
   var CONFIG = window.CONFIG, DATA = window.DATA, U = window.Game.Utils;
   var el = {};
-  var lastBanner = '';
+  var pointer = null;   // {source, benchIdx?, startX, startY, dragging}
+  var ghost = null;
 
   function init() {
     el.home = document.getElementById('screen-home');
@@ -12,7 +13,7 @@ Game.UI = (function () {
     el.battleStage = document.getElementById('battle-stage');
     el.canvas = document.getElementById('battle-canvas');
     el.modalRoot = document.getElementById('modal-root');
-    U.bindPointer(el.canvas, { onDown: function (p) { Game.Audio.unlock(); Game.State.onStagePointer(p.x, p.y); } });
+    bindCanvasDrag();
   }
 
   function route(screen) {
@@ -28,6 +29,95 @@ Game.UI = (function () {
       buildBattle();
     }
     closeModal();
+  }
+
+  /* ================= 拖拽 ================= */
+  function dropTargetAt(cx, cy) {
+    var slots = document.querySelectorAll('#bench .bench-slot');
+    for (var i = 0; i < slots.length; i++) {
+      var r = slots[i].getBoundingClientRect();
+      if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return { type: 'bench', idx: i };
+    }
+    var cr = el.canvas.getBoundingClientRect();
+    if (cx >= cr.left && cx <= cr.right && cy >= cr.top && cy <= cr.bottom) {
+      var L = Game.Render.getLayout();
+      if (!L.cellW) return { type: 'none' };
+      var c = Math.floor((cx - cr.left) / L.cellW), rr = Math.floor((cy - cr.top) / L.cellH);
+      if (c >= 0 && c < CONFIG.COLS && rr >= 0 && rr < CONFIG.ROWS) return { type: 'cell', c: c, r: rr };
+    }
+    return { type: 'none' };
+  }
+  function showGhost() {
+    if (!ghost) {
+      ghost = document.createElement('div');
+      ghost.id = 'drag-ghost';
+      ghost.style.cssText = 'position:fixed;z-index:80;pointer-events:none;display:flex;align-items:center;justify-content:center;background:#fbe9b8;border:2px solid #b8860b;border-radius:8px;font-size:20px;font-family:KaiTi,serif;color:#7a2a1a;box-shadow:0 4px 12px rgba(0,0,0,.35)';
+      document.body.appendChild(ghost);
+    }
+    ghost.style.display = 'flex';
+  }
+  function updateGhost() {
+    var d = Game.State.getDrag();
+    if (!d || !ghost) return;
+    var label = d.unit.kind === 's' ? d.unit.ch : (d.unit.kind === 'g' ? d.unit.name : (d.unit.kind === 'f' ? d.unit.ch : '铲'));
+    ghost.textContent = label;
+    ghost.style.left = ((d.x || 0) - 22) + 'px';
+    ghost.style.top = ((d.y || 0) - 30) + 'px';
+    ghost.style.width = '44px';
+    ghost.style.height = '52px';
+  }
+  function hideGhost() { if (ghost) ghost.style.display = 'none'; }
+
+  function bindBenchDrag() {
+    var bench = document.getElementById('bench');
+    if (!bench) return;
+    bench.addEventListener('pointerdown', function (e) {
+      var slot = e.target.closest('.bench-slot');
+      if (!slot) return;
+      var idx = parseInt(slot.dataset.idx, 10);
+      pointer = { source: 'bench', benchIdx: idx, startX: e.clientX, startY: e.clientY, dragging: false };
+      try { slot.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    bench.addEventListener('pointermove', function (e) {
+      if (!pointer || pointer.source !== 'bench') return;
+      var dx = e.clientX - pointer.startX, dy = e.clientY - pointer.startY;
+      if (!pointer.dragging && dx * dx + dy * dy > 64) {
+        if (Game.State.beginBenchDrag(pointer.benchIdx)) { pointer.dragging = true; showGhost(); }
+      }
+      if (pointer.dragging) { Game.State.updateDrag(e.clientX, e.clientY); updateGhost(); }
+    });
+    bench.addEventListener('pointerup', function (e) {
+      if (!pointer || pointer.source !== 'bench') return;
+      var p = pointer; pointer = null;
+      if (p.dragging) { hideGhost(); Game.State.endDrag(dropTargetAt(e.clientX, e.clientY)); }
+      else Game.State.onBenchTap(p.benchIdx);
+    });
+  }
+
+  function bindCanvasDrag() {
+    U.bindPointer(el.canvas, {
+      onDown: function (p, e) {
+        pointer = { source: 'canvas', startX: e.clientX, startY: e.clientY, startPxX: p.x, startPxY: p.y, dragging: false };
+      },
+      onMove: function (p, e) {
+        if (!pointer || pointer.source !== 'canvas') return;
+        var dx = e.clientX - pointer.startX, dy = e.clientY - pointer.startY;
+        if (!pointer.dragging && dx * dx + dy * dy > 64) {
+          var L = Game.Render.getLayout();
+          if (L.cellW) {
+            var c = Math.floor(pointer.startPxX / L.cellW), r = Math.floor(pointer.startPxY / L.cellH);
+            if (Game.State.beginUnitDrag(c, r)) { pointer.dragging = true; showGhost(); }
+          }
+        }
+        if (pointer.dragging) { Game.State.updateDrag(e.clientX, e.clientY); updateGhost(); }
+      },
+      onUp: function (p, e) {
+        if (!pointer || pointer.source !== 'canvas') return;
+        var pt = pointer; pointer = null;
+        if (pt.dragging) { hideGhost(); Game.State.endDrag(dropTargetAt(e.clientX, e.clientY)); }
+        else { Game.Audio.unlock(); Game.State.onStagePointer(pt.startPxX, pt.startPxY); }
+      }
+    });
   }
 
   /* ================= 主页 ================= */
@@ -64,6 +154,7 @@ Game.UI = (function () {
         '<button class="ink-btn secondary" data-act="shop">神秘商人</button>' +
         '<button class="ink-btn secondary" data-act="rank">军衔</button>' +
         '<button class="ink-btn secondary" data-act="bag">背包</button>' +
+        '<button class="ink-btn secondary" data-act="cheat">金手指</button>' +
         '<button class="ink-btn secondary" data-act="help">帮助</button>' +
         '<button class="ink-btn secondary" data-act="sound">' + (meta.sound ? '音效:开' : '音效:关') + '</button>' +
       '</div>';
@@ -75,6 +166,7 @@ Game.UI = (function () {
       if (act === 'shop') openShop();
       else if (act === 'rank') openRank();
       else if (act === 'bag') openBag();
+      else if (act === 'cheat') openCheat();
       else if (act === 'help') openHelp();
       else if (act === 'sound') Game.State.toggleSound();
     });
@@ -91,7 +183,6 @@ Game.UI = (function () {
   /* ================= 战局 ================= */
   function buildBattle() {
     var st = Game.State.state, b = st.battle;
-    var hearts = '♥'.repeat(CONFIG.ECON.hearts);
     el.battleTop.innerHTML =
       '<div class="bt-row">' +
         '<button class="bt-tool" id="bt-home">↩</button>' +
@@ -116,7 +207,6 @@ Game.UI = (function () {
         '</div>' +
       '</div>' +
       '<div class="bb-row2">' +
-        '<div id="hero-combine"></div>' +
         '<div id="active-items"></div>' +
       '</div>';
     document.getElementById('bt-home').addEventListener('click', askQuit);
@@ -124,10 +214,7 @@ Game.UI = (function () {
     document.getElementById('bt-speed').addEventListener('click', toggleSpeed);
     document.getElementById('btn-recruit').addEventListener('click', function () { Game.Audio.unlock(); Game.State.recruit(); });
     document.getElementById('bt-shop').addEventListener('click', openShop);
-    document.getElementById('bench').addEventListener('click', function (e) {
-      var slot = e.target.closest('.bench-slot');
-      if (slot) Game.State.onBenchTap(parseInt(slot.dataset.idx, 10));
-    });
+    bindBenchDrag();
     syncBattle(b);
   }
 
@@ -181,17 +268,6 @@ Game.UI = (function () {
       for (var i = 0; i < b.P.bench.length; i++) html += benchSlotHTML(b, i, b.P.bench[i]);
       bench.innerHTML = html;
     }
-    var hc = document.getElementById('hero-combine');
-    if (hc) {
-      var heroes = Game.State.availableHeroes();
-      if (heroes.length) {
-        var hhtml = '<span class="hc-label">可觉醒:</span>';
-        for (var h = 0; h < heroes.length; h++) hhtml += '<button class="hc-btn" data-hk="' + heroes[h] + '">' + heroes[h] + '</button>';
-        hc.innerHTML = hhtml;
-        var btns = hc.querySelectorAll('.hc-btn');
-        for (var bb = 0; bb < btns.length; bb++) btns[bb].addEventListener('click', function () { Game.State.combineHero(this.dataset.hk); });
-      } else hc.innerHTML = '';
-    }
     var aiWrap = document.getElementById('active-items');
     if (aiWrap) {
       var ahtml = '';
@@ -212,28 +288,25 @@ Game.UI = (function () {
     if (!b) return;
     function set(id, v) { var e = document.getElementById(id); if (e) e.textContent = v; }
     set('res-buns', b.P.mantou);
-    var cost = Game.Battle.recruitCost(b.P);
+    var cost = Game.Battle.recruitCost(b, b.P);
     if (b.dailyBuff && b.dailyBuff.type === 'recruitCost') cost = Math.max(1, Math.round(cost * b.dailyBuff.mul));
     set('res-cost', cost);
     set('btn-cost', cost);
-    // 红心
     var hp = document.getElementById('bt-hearts-p'), he = document.getElementById('bt-hearts-e');
-    if (hp) { hp.textContent = '♥'.repeat(Math.max(0, b.P.hearts)); }
-    if (he) { he.textContent = b.solo ? '' : '♥'.repeat(Math.max(0, b.E.hearts)); }
-    // 波次
+    if (hp) hp.textContent = '♥'.repeat(Math.max(0, b.P.hearts));
+    if (he) he.textContent = b.solo ? '' : '♥'.repeat(Math.max(0, b.E.hearts));
     var wtext = '';
     if (b.mode === 'endless') wtext = '无尽 · 第 ' + b.wave + ' 波';
     else if (b.mode === 'arena') wtext = '竞技 · 第 ' + b.wave + '/' + b.maxWave + ' 波';
     else wtext = '第 ' + b.wave + '/' + b.maxWave + ' 波';
     set('bt-wave', wtext);
-    // 提示
     var hint = '';
     if (b.uiSel && b.uiSel.mode === 'unit') hint = '点击要强化的我方单位';
     else if (b.uiSel && b.uiSel.mode === 'benchChar') hint = '点击备战席要改写的汉字';
     else if (b.unlockMode) hint = '点击亮起的空地解锁建造格';
-    else if (b.selCard >= 0) hint = '点击亮起的空地放置';
+    else if (b.selCard >= 0) hint = '点/拖到亮起的空地放置';
     else if (b.waveState === 'idle' || b.waveState === 'cleared') hint = '下一波 ' + Math.max(0, b.restTimer).toFixed(1) + 's';
-    else hint = '抵御进攻…';
+    else hint = '拖动备战席卡牌上阵 · 抵御进攻…';
     set('res-hint', hint);
     var btn = document.getElementById('btn-recruit');
     if (btn) btn.disabled = b.P.mantou < cost || b.P.bench.indexOf(null) < 0;
@@ -286,6 +359,68 @@ Game.UI = (function () {
       var title = el.modalRoot.querySelector('.modal-title');
       if (title && title.textContent === '神秘商人') openShop();
     }
+  }
+
+  /* ================= 金手指 ================= */
+  function openCheat() {
+    var meta = Game.State.state.meta;
+    var cfg = Game.Cheat.settings(meta);
+    function sel(id, label, opts, val) {
+      var o = '';
+      for (var i = 0; i < opts.length; i++) o += '<option value="' + opts[i] + '"' + (String(val) === String(opts[i]) ? ' selected' : '') + '>' + label + ' ' + opts[i] + '</option>';
+      return '<label class="cheat-row"><span>' + label + '</span><select id="' + id + '">' + o + '</select></label>';
+    }
+    function num(id, label, val) {
+      return '<label class="cheat-row"><span>' + label + '</span><input id="' + id + '" type="number" value="' + val + '"></label>';
+    }
+    var card = openModal(
+      '<div class="modal-title">金手指</div>' +
+      '<p style="font-size:12px;color:#8a7d66;margin-bottom:8px">单机自定义：改资源 / 抽卡 / 装备 / 挂机 / 难度。改动即时生效（下一局起）。</p>' +
+      '<div class="cheat-box">' +
+        sel('ch-enable', '启用金手指', ['否', '是'], cfg.enabled ? '是' : '否') +
+        num('ch-mantou', '开局馒头', cfg.startMantou == null ? '' : cfg.startMantou) +
+        sel('ch-free', '征兵免费', ['否', '是'], cfg.recruitFree ? '是' : '否') +
+        num('ch-soldier', '抽卡·士兵权重', cfg.recruitSoldier || '') +
+        num('ch-frag', '抽卡·碎片权重', cfg.recruitFrag || '') +
+        num('ch-shovel', '抽卡·铲子权重', cfg.recruitShovel || '') +
+        sel('ch-slv', '新抽士兵等级', ['1', '2', '3', '4', '5'], cfg.soldierLv || 1) +
+        sel('ch-dmg', '己方伤害倍率', ['0.5', '1', '2', '5', '10'], cfg.dmgMul) +
+        sel('ch-enemyhp', '敌方血量倍率', ['0.5', '1', '2', '3'], cfg.enemyHpMul) +
+        sel('ch-hearts', '阿斗红心', ['3', '5', '10', '20'], cfg.hearts || CONFIG.ECON.hearts) +
+        sel('ch-offline', '挂机倍率', ['1', '5', '10', '50'], cfg.offlineMul) +
+        sel('ch-wavebonus', '波次馒头倍率', ['1', '2', '5', '10'], cfg.waveBonusMul) +
+      '</div>' +
+      '<div class="result-actions" style="margin-top:12px">' +
+        '<button class="ink-btn" id="ch-save">保存设置</button>' +
+        '<button class="ink-btn secondary" id="ch-coins">+1000金币</button>' +
+        '<button class="ink-btn secondary" id="ch-weapons">武将全满配</button>' +
+        '<button class="ink-btn secondary" id="ch-max">满级满军衔</button>' +
+      '</div>'
+    );
+    function read() {
+      return {
+        enabled: card.querySelector('#ch-enable').value === '是',
+        startMantou: card.querySelector('#ch-mantou').value === '' ? null : parseInt(card.querySelector('#ch-mantou').value, 10),
+        recruitFree: card.querySelector('#ch-free').value === '是',
+        recruitSoldier: card.querySelector('#ch-soldier').value === '' ? null : parseInt(card.querySelector('#ch-soldier').value, 10),
+        recruitFrag: card.querySelector('#ch-frag').value === '' ? null : parseInt(card.querySelector('#ch-frag').value, 10),
+        recruitShovel: card.querySelector('#ch-shovel').value === '' ? null : parseInt(card.querySelector('#ch-shovel').value, 10),
+        soldierLv: parseInt(card.querySelector('#ch-slv').value, 10),
+        dmgMul: parseFloat(card.querySelector('#ch-dmg').value),
+        enemyHpMul: parseFloat(card.querySelector('#ch-enemyhp').value),
+        hearts: parseInt(card.querySelector('#ch-hearts').value, 10),
+        offlineMul: parseInt(card.querySelector('#ch-offline').value, 10),
+        waveBonusMul: parseInt(card.querySelector('#ch-wavebonus').value, 10)
+      };
+    }
+    card.querySelector('#ch-save').addEventListener('click', function () {
+      Game.State.cheatSave(read());
+      Game.UI.toast('金手指已保存');
+      closeModal();
+    });
+    card.querySelector('#ch-coins').addEventListener('click', function () { Game.Cheat.addCoins(meta, 1000); Game.UI.toast('金币 +1000'); openCheat(); });
+    card.querySelector('#ch-weapons').addEventListener('click', function () { Game.Cheat.maxWeapons(meta); Game.UI.toast('武将全部满配神兵'); openCheat(); });
+    card.querySelector('#ch-max').addEventListener('click', function () { Game.Cheat.levelUp(meta); Game.UI.toast('已满级满军衔'); openCheat(); });
   }
 
   function openRank() {
@@ -352,12 +487,11 @@ Game.UI = (function () {
       '<div class="modal-title">玩法说明</div>' +
       '<div class="help-box">' +
         '<h4>目标</h4><p>守将（阿斗）有 ' + CONFIG.ECON.hearts + ' 颗红心，漏过一个敌人扣一颗，先掉光的一方落败。</p>' +
-        '<h4>征兵</h4><p>花馒头【替换】备战席为 5 张新卡（士兵/汉字/铲子）。手牌自动合成同字同级士兵。</p>' +
-        '<h4>布阵</h4><p>点备战席卡牌 → 点亮起的空地放置。点铲子 → 点一块空地解锁新建造格。近战放贴路格、远程放后方。</p>' +
-        '<h4>合成</h4><p>同兵种同字同级 2 合 1 升级（最高5级）；集齐汉字（如 赵+云）可觉醒武将。</p>' +
-        '<h4>武将</h4><p>赵云贯穿、关羽横扫、张飞眩晕、马超重击、黄忠超远速射、刘备友军增伤、曹操全屏斩。</p>' +
-        '<h4>竞技</h4><p>双方同受波次、各自防守，先失守者败；撑过 10 波即胜。</p>' +
-        '<h4>其他</h4><p>每波告破有馒头犒赏并给阿斗回心；地图与 buff 每日轮换；离线自动积累金币。</p>' +
+        '<h4>征兵</h4><p>花馒头【替换】备战席为 5 张新卡（士兵/汉字碎片/铲子）。</p>' +
+        '<h4>拖拽上阵</h4><p>从备战席把卡牌【拖】到亮起的空地上；同字同级士兵可叠到同格升级；点备战席也可看范围。</p>' +
+        '<h4>武将觉醒</h4><p>把金色汉字碎片放到【相邻】两格（首字在左、尾字在右），如 赵+云=赵云。拖同字碎片到武将军升级。</p>' +
+        '<h4>铲子</h4><p>把铲子拖到/点到一块空地解锁建造格（逐格）。开局每个半场有设计好的初始地块。</p>' +
+        '<h4>金手指</h4><p>主页点「金手指」可自定义资源/抽卡/装备/挂机/难度，单机随意调。</p>' +
       '</div>'
     );
   }
@@ -430,6 +564,7 @@ Game.UI = (function () {
     showResult: showResult,
     openShop: openShop,
     refreshShop: refreshShop,
+    openCheat: openCheat,
     closeModal: closeModal,
     toast: toast
   };
