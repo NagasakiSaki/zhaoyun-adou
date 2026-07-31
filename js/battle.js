@@ -68,9 +68,10 @@ Game.Battle = (function () {
       dailyBuff: dailyBuff, farmerIncome: (meta.farmerLevel || 0) * CONFIG.FARMER_BONUS,
       activeItems: [null, null], weapons: meta.weapons || {},
       heroStars: meta.heroes || {}, training: meta.training || {},
+      deck: meta.deck || [], deckSlots: meta.deckSlots || CONFIG.DECK.baseSlots,
       drops: [],
       time: 0, speed: 1, paused: false, result: null,
-      selCard: -1, unlockMode: false, uiSel: null,
+      selCard: -1, unlockMode: false, uiSel: null, selInfo: null,
       _acc: 0, _auraP: 1, _auraE: 1
     };
     // AI 初始手牌
@@ -173,16 +174,32 @@ Game.Battle = (function () {
     }
     acc += wShovel;
     if (roll < acc) return { kind: 'shovel', ch: '铲', cd: 0 };
-    // 碎片：尽量补全已有碎片配对的另一半
+    // 碎片：只出「牌组武将」的首尾字（没招募的武将的字不进牌库）
     var own = ownedFragChars(S);
+    var deck = b.deck || [];
+    var deckChars = {};
+    for (var di = 0; di < deck.length; di++) {
+      var dh = heroByName(deck[di]);
+      if (dh) { deckChars[dh.recipe[0]] = 1; deckChars[dh.recipe[1]] = 1; }
+    }
+    var poolChars = Object.keys(deckChars);
+    if (!poolChars.length) poolChars = Object.keys(DATA.FRAG_WEIGHTS);
     var wants = [];
-    for (var hk in DATA.HEROES) {
-      var h = DATA.HEROES[hk];
-      if (own[h.recipe[0]] && !own[h.recipe[1]]) wants.push(h.recipe[1]);
-      if (own[h.recipe[1]] && !own[h.recipe[0]]) wants.push(h.recipe[0]);
+    for (var di2 = 0; di2 < deck.length; di2++) {
+      var dh2 = heroByName(deck[di2]);
+      if (!dh2) continue;
+      if (own[dh2.recipe[0]] && !own[dh2.recipe[1]]) wants.push(dh2.recipe[1]);
+      if (own[dh2.recipe[1]] && !own[dh2.recipe[0]]) wants.push(dh2.recipe[0]);
     }
     var pairChance = 0.75 + luck * 0.2;
-    var fc = (wants.length && Math.random() < pairChance) ? U.pick(wants) : U.weightedPick(DATA.FRAG_WEIGHTS);
+    var fc;
+    if (wants.length && Math.random() < pairChance) {
+      fc = U.pick(wants);
+    } else {
+      var weights = {};
+      for (var pi = 0; pi < poolChars.length; pi++) weights[poolChars[pi]] = DATA.FRAG_WEIGHTS[poolChars[pi]] || 1;
+      fc = U.weightedPick(weights);
+    }
     return { kind: 'f', ch: fc, lv: 0, cd: 0 };
   }
 
@@ -191,8 +208,8 @@ Game.Battle = (function () {
     if (S.mantou < cost) { if (isPlayer) Game.UI.toast('馒头不足'); return false; }
     S.mantou -= cost;
     S.recruitCount++;
+    // 原版机制：整手替换为 5 张新卡，不自动合并（合并靠拖拽）
     for (var i = 0; i < CONFIG.BENCH_SIZE; i++) S.bench[i] = rollCard(b, S, isPlayer ? 0 : CONFIG.ARENA.luck);
-    autoMergeBench(b, S);
     if (isPlayer) Game.Audio.play('recruit');
     return true;
   }
@@ -241,7 +258,8 @@ Game.Battle = (function () {
     return true;
   }
 
-  function removeSource(S, fromKey) {
+  function removeSource(S, fromKey, skipKey) {
+    if (fromKey === skipKey) return; // 来源格即落子格（拖回原位），不清空
     if (fromKey.charAt(0) === 'b') S.bench[+fromKey.slice(1)] = null;
     else delete S.units[fromKey];
   }
@@ -263,8 +281,8 @@ Game.Battle = (function () {
       if (pairL) { pair = pairL; placeFirst = true; }
       else if (pairR) { pair = pairR; neighborFirst = true; }
       if (!pair) continue;
-      // 上阵门禁：未拥有的武将不能觉醒
-      if (!b.heroStars || b.heroStars[pair.name] === undefined) continue;
+      // 上阵门禁：只有牌组里的武将能觉醒
+      if (!b.deck || b.deck.indexOf(pair.name) < 0) continue;
       var neighborOnLeft = (nc < c);
       if (neighborOnLeft && !neighborFirst) continue;
       if (!neighborOnLeft && !placeFirst) continue;
@@ -297,23 +315,23 @@ Game.Battle = (function () {
     var S = b.P;
     var k = key(c, r);
     if (unit.kind === 'shovel') {
-      if (unlockCell(b, c, r)) { removeSource(S, fromKey); return 'unlocked'; }
+      if (unlockCell(b, c, r)) { removeSource(S, fromKey, k); return 'unlocked'; }
       return 'fail';
     }
     if (b.cellType[k] !== 'build_p') return 'fail';
     var target = S.units[k];
     if (!target) {
       if (unit.kind === 'f') {
-        if (tryFormHero(b, S, c, r, unit)) { removeSource(S, fromKey); return 'hero'; }
+        if (tryFormHero(b, S, c, r, unit)) { removeSource(S, fromKey, k); return 'hero'; }
       }
       S.units[k] = unit;
-      removeSource(S, fromKey);
+      removeSource(S, fromKey, k);
       return 'placed';
     }
     // 兵种同字同级合并
     if (target.kind === 's' && unit.kind === 's' && target.ch === unit.ch && target.lv === unit.lv && target.lv < CONFIG.MAX_LV) {
       target.lv++;
-      removeSource(S, fromKey);
+      removeSource(S, fromKey, k);
       Game.Effects.burst(c + 0.5, r + 0.5, '#c9a227', 1.4);
       Game.Audio.play('merge');
       return 'merged';
@@ -323,7 +341,7 @@ Game.Battle = (function () {
       var nlv = (target.lv || 1) + 1;
       target.lv = nlv;
       if (target.pairedKey && S.units[target.pairedKey]) S.units[target.pairedKey].lv = nlv;
-      removeSource(S, fromKey);
+      removeSource(S, fromKey, k);
       Game.Effects.heroSummon(c + 0.5, r + 0.5);
       Game.Audio.play('merge');
       return 'upgraded';
@@ -334,7 +352,7 @@ Game.Battle = (function () {
       unit.lv = nlv2;
       if (unit.pairedKey && S.units[unit.pairedKey]) S.units[unit.pairedKey].lv = nlv2;
       S.units[k] = unit;
-      removeSource(S, fromKey);
+      removeSource(S, fromKey, k);
       Game.Effects.heroSummon(c + 0.5, r + 0.5);
       Game.Audio.play('merge');
       return 'upgraded';
@@ -631,7 +649,8 @@ Game.Battle = (function () {
           x: px, y: py, target: target,
           spd: (snipe ? 16 : 11), dmg: dmg, src: u,
           arrow: (u.kind === 's' && u.ch === '弓') || snipe,
-          gold: u.kind === 'g', ang: 0
+          gold: u.kind === 'g', ang: 0,
+          shape: u.kind === 'g' ? 'hero' : u.ch
         });
       }
     }

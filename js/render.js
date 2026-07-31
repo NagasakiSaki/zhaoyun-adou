@@ -72,6 +72,7 @@ Game.Render = (function () {
     drawBullets(b);
     drawEffects(b);
     drawHighlights(b);
+    drawRange(b);
   }
 
   function drawCells(b, theme) {
@@ -293,16 +294,38 @@ Game.Render = (function () {
       var bl = b.bullets[i];
       var p = { x: bl.x * L.cellW, y: bl.y * L.cellH };
       var cell = Math.min(L.cellW, L.cellH);
+      var s = cell * 0.26;
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(bl.ang || 0);
-      ctx.fillStyle = bl.gold ? '#b8860b' : '#3a3126';
-      if (bl.arrow) {
-        ctx.fillRect(-cell * 0.18, -cell * 0.03, cell * 0.3, cell * 0.06);
-        ctx.fillStyle = '#c8c8d0';
-        ctx.beginPath();
-        ctx.moveTo(cell * 0.12, -cell * 0.07); ctx.lineTo(cell * 0.26, 0); ctx.lineTo(cell * 0.12, cell * 0.07);
-        ctx.closePath(); ctx.fill();
+      var metal = bl.gold ? '#b8860b' : '#3a3126';
+      var blade = bl.gold ? '#e8c53a' : '#c8c8d0';
+      ctx.fillStyle = metal;
+      ctx.strokeStyle = metal;
+      var sh = bl.shape;
+      if (sh === '刀') {
+        ctx.fillRect(-s * 0.5, -s * 0.12, s * 0.42, s * 0.24);
+        ctx.fillStyle = blade;
+        ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.14); ctx.lineTo(s * 0.6, 0); ctx.lineTo(-s * 0.08, s * 0.14); ctx.closePath(); ctx.fill();
+      } else if (sh === '枪') {
+        ctx.lineWidth = Math.max(2, s * 0.16);
+        ctx.beginPath(); ctx.moveTo(-s * 0.7, 0); ctx.lineTo(s * 0.3, 0); ctx.stroke();
+        ctx.fillStyle = blade;
+        ctx.beginPath(); ctx.moveTo(s * 0.3, -s * 0.16); ctx.lineTo(s * 0.72, 0); ctx.lineTo(s * 0.3, s * 0.16); ctx.closePath(); ctx.fill();
+      } else if (sh === '骑') {
+        ctx.fillRect(-s * 0.5, -s * 0.12, s * 0.3, s * 0.24);
+        ctx.fillRect(-s * 0.2, -s * 0.28, s * 0.14, s * 0.56);
+        ctx.fillStyle = blade;
+        ctx.beginPath(); ctx.moveTo(-s * 0.2, -s * 0.2); ctx.lineTo(s * 0.62, 0); ctx.lineTo(-s * 0.2, s * 0.2); ctx.closePath(); ctx.fill();
+      } else if (sh === '弓' || sh === 'hero') {
+        ctx.lineWidth = Math.max(2, s * 0.14);
+        ctx.beginPath(); ctx.moveTo(-s * 0.7, 0); ctx.lineTo(s * 0.42, 0); ctx.stroke();
+        ctx.fillStyle = blade;
+        ctx.beginPath(); ctx.moveTo(s * 0.68, 0); ctx.lineTo(s * 0.34, -s * 0.22); ctx.lineTo(s * 0.34, s * 0.22); ctx.closePath(); ctx.fill();
+        if (sh === 'hero') {
+          ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(-s * 0.7, -s * 0.16); ctx.lineTo(-s * 0.84, 0); ctx.lineTo(-s * 0.7, s * 0.16); ctx.stroke();
+        }
       } else {
         ctx.beginPath();
         ctx.arc(0, 0, cell * (bl.gold ? 0.09 : 0.07), 0, Math.PI * 2);
@@ -310,6 +333,18 @@ Game.Render = (function () {
       }
       ctx.restore();
     }
+  }
+
+  function drawRange(b) {
+    var si = b.selInfo;
+    if (!si || si.x == null || si.range == null) return;
+    var p = { x: si.x * L.cellW, y: si.y * L.cellH };
+    var r = si.range * Math.min(L.cellW, L.cellH);
+    ctx.fillStyle = 'rgba(59,74,107,.12)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(59,74,107,.65)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
   }
 
   function drawEffects(b) {

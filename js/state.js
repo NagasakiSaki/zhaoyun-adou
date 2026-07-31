@@ -54,6 +54,7 @@ Game.State = (function () {
       arena: Game.Save.loadSlot('arena')
     };
     ensureDaily(state.meta);
+    ensureDeck(state.meta);
     var elapsedMin = (Date.now() - state.meta.offlineTS) / 60000;
     if (elapsedMin >= CONFIG.OFFLINE.minMinutes) {
       var cap = Math.min(CONFIG.OFFLINE.capMin, Math.floor(elapsedMin));
@@ -202,6 +203,10 @@ Game.State = (function () {
     if (card.kind === 'f') { Game.UI.toast('拖动碎片到相邻空地可拼字觉醒武将'); return; }
     b.selCard = (b.selCard === idx) ? -1 : idx;
     b.unlockMode = false; b._shovelIdx = -1;
+    // 点手牌看攻击范围
+    if (b.selCard >= 0 && (card.kind === 's' || card.kind === 'g')) {
+      b.selInfo = { range: Game.Battle.unitStats(card, 'P', b).range };
+    } else b.selInfo = null;
     Game.UI.syncBattle(b);
   }
 
@@ -214,9 +219,16 @@ Game.State = (function () {
     var c = Math.floor(pxX / L.cellW), r = Math.floor(pxY / L.cellH);
     if (c < 0 || c >= b.cols || r < 0 || r >= b.rows) return;
     if (b.uiSel && b.uiSel.mode === 'unit') {
-      var u = b.P.units[Game.Battle.key(c, r)];
-      if (u) applyShenbingfu(b, b.uiSel.itemSlot, u, c, r);
+      var u0 = b.P.units[Game.Battle.key(c, r)];
+      if (u0) applyShenbingfu(b, b.uiSel.itemSlot, u0, c, r);
       else Game.UI.toast('请点击我方单位');
+      return;
+    }
+    // 点击我方单位 → 查看攻击范围
+    var cu = b.P.units[Game.Battle.key(c, r)];
+    if (cu && !b.unlockMode && b.selCard < 0) {
+      b.selInfo = { x: c + 0.5, y: r + 0.5, range: Game.Battle.unitStats(cu, 'P', b).range };
+      Game.UI.syncBattle(b);
       return;
     }
     if (b.unlockMode) {
@@ -233,6 +245,7 @@ Game.State = (function () {
     if (b.selCard >= 0) {
       var res = Game.Battle.dropUnit(b, b.P.bench[b.selCard], 'b' + b.selCard, c, r);
       if (res !== 'fail') b.selCard = -1;
+      b.selInfo = null;
       Game.UI.syncBattle(b);
     }
   }
@@ -463,9 +476,51 @@ Game.State = (function () {
     var name = U.pick(pool);
     if (!name) { name = DATA.HEROES[U.pick(Object.keys(DATA.HEROES))].name; rar = DATA.HERO_RARITY[name] || 1; }
     var isNew = meta.heroes[name] === undefined;
-    if (isNew) meta.heroes[name] = 0;
-    else meta.keepsakes[name] = (meta.keepsakes[name] || 0) + 1;
+    if (isNew) {
+      meta.heroes[name] = 0;
+      // 抽到新武将自动入组（有牌组空位时）
+      if (!meta.deck) meta.deck = [];
+      if (meta.deck.length < (meta.deckSlots || CONFIG.DECK.baseSlots)) meta.deck.push(name);
+    } else {
+      meta.keepsakes[name] = (meta.keepsakes[name] || 0) + 1;
+    }
     return { name: name, rarity: rar, isNew: isNew };
+  }
+
+  /* ---- 牌组 ---- */
+  function ensureDeck(meta) {
+    if (!meta.deck) meta.deck = [];
+    var owned = meta.heroes || {};
+    var maxSlots = meta.deckSlots || CONFIG.DECK.baseSlots;
+    meta.deck = meta.deck.filter(function (n) { return owned[n] !== undefined; });
+    for (var n in owned) {
+      if (meta.deck.length >= maxSlots) break;
+      if (meta.deck.indexOf(n) < 0) meta.deck.push(n);
+    }
+    Game.Save.saveMeta(meta);
+  }
+  function toggleDeck(name) {
+    var meta = state.meta;
+    if (meta.heroes[name] === undefined) { Game.UI.toast('未拥有该武将'); return; }
+    var maxSlots = meta.deckSlots || CONFIG.DECK.baseSlots;
+    var idx = meta.deck.indexOf(name);
+    if (idx >= 0) { meta.deck.splice(idx, 1); }
+    else {
+      if (meta.deck.length >= maxSlots) { Game.UI.toast('牌组已满，可用元宝扩容'); return; }
+      meta.deck.push(name);
+    }
+    Game.Save.saveMeta(meta);
+    Game.UI.toast(idx >= 0 ? name + ' 已撤下' : name + ' 已入组');
+  }
+  function unlockDeckSlot() {
+    var meta = state.meta;
+    if ((meta.deckSlots || CONFIG.DECK.baseSlots) >= CONFIG.DECK.maxSlots) { Game.UI.toast('牌组已达上限'); return; }
+    if (meta.yuanbao < CONFIG.DECK.unlockCost) { Game.UI.toast('元宝不足'); return; }
+    meta.yuanbao -= CONFIG.DECK.unlockCost;
+    meta.deckSlots = (meta.deckSlots || CONFIG.DECK.baseSlots) + 1;
+    ensureDeck(meta);
+    Game.Audio.play('coin');
+    Game.Save.saveMeta(meta);
   }
   function starUp(name) {
     var meta = state.meta;
@@ -566,6 +621,9 @@ Game.State = (function () {
     canClaimAch: canClaimAch,
     claimAchievement: claimAchievement,
     resetDaily: resetDaily,
-    achievementDone: achievementDone
+    achievementDone: achievementDone,
+    ensureDeck: ensureDeck,
+    toggleDeck: toggleDeck,
+    unlockDeckSlot: unlockDeckSlot
   };
 })();

@@ -34,33 +34,53 @@ const cell=b.buildP[0];
 Game.Battle.dropUnit(b,b.P.bench[2],'b2',cell[0],cell[1]);
 check('拖出第3张牌后手牌该格变空', b.P.bench[2]===null && b.P.units[Game.Battle.key(cell[0],cell[1])].ch==='刀');
 
-console.log('== 武将上阵门禁 ==');
+console.log('== 征兵整手重抽(补满5张) ==');
+const m0=b.P.mantou;
+Game.State.recruit();
+check('扣费+手牌恰好5张', b.P.mantou<m0 && b.P.bench.filter(Boolean).length===5, 'n='+b.P.bench.filter(Boolean).length);
+
+const pool = new Set();
+for(let i=0;i<300;i++){ const c=Game.Battle.rollCard(b,b.P,0); if(c.kind==='f') pool.add(c.ch); }
+const allowed=new Set(['刘','备','关','羽','张','飞']);
+let badPool=[...pool].filter(ch=>!allowed.has(ch));
+check('碎片只出牌组武将的字', badPool.length===0, JSON.stringify([...pool]));
+
+console.log('== 牌组门禁（只有牌组的武将能觉醒） ==');
 let ca=b.buildP[1], cb=null;
 for(let i=0;i<b.buildP.length;i++){ const p=b.buildP[i]; if(Math.abs(p[0]-ca[0])+Math.abs(p[1]-ca[1])===1 && !b.P.units[Game.Battle.key(p[0],p[1])]){cb=p;break;} }
 let left = ca[0]<cb[0]?ca:cb, right = left===ca?cb:ca;
-// 初始未拥有赵云
-check('初始仅3武将', Object.keys(meta.heroes).length===3 && meta.heroes['刘备']!==undefined);
+// 拥有赵云但不在牌组 → 不触发觉醒
+meta.heroes['赵云']=0;
+check('初始牌组仅3将', meta.deck.length===3);
 b.P.bench[0]={kind:'f',ch:'赵',lv:0,cd:0};
 Game.Battle.dropUnit(b,b.P.bench[0],'b0',left[0],left[1]);
 b.P.bench[0]={kind:'f',ch:'云',lv:0,cd:0};
 let res=Game.Battle.dropUnit(b,b.P.bench[0],'b0',right[0],right[1]);
-check('未拥有武将不触发觉醒', res==='placed' && b.P.units[Game.Battle.key(left[0],left[1])].kind==='f');
-// 解锁赵云后
-meta.heroes['赵云']=0;
-Game.Battle.dropUnit(b,b.P.units[Game.Battle.key(left[0],left[1])],Game.Battle.key(left[0],left[1]),right[0],right[1]); // 尝试换位后觉醒? 简化：重放
-b.P.units[Game.Battle.key(left[0],left[1])]={kind:'f',ch:'赵',lv:0,cd:0};
-b.P.units[Game.Battle.key(right[0],right[1])]={kind:'f',ch:'云',lv:0,cd:0};
+check('不在牌组不触发觉醒', res==='placed' && b.P.units[Game.Battle.key(left[0],left[1])].kind==='f');
+// 加入牌组后
+Game.State.toggleDeck('赵云');
 Game.Battle.tryFormHero(b,b.P,right[0],right[1],b.P.units[Game.Battle.key(right[0],right[1])]);
 const lu=b.P.units[Game.Battle.key(left[0],left[1])];
-check('拥有后觉醒赵云', lu && lu.kind==='g' && lu.name==='赵云');
+check('入牌组后觉醒赵云', lu && lu.kind==='g' && lu.name==='赵云');
+check('牌组含赵云', meta.deck.indexOf('赵云')>=0);
+
+Game.State.state.battle=null; Game.State.state.mode=null;
+meta.dailyMapIndex=0;
+meta.deck=['刘备','关羽','张飞'];
+Game.State.newRun('campaign');
+b=Game.State.state.battle;
 
 console.log('== 武将经验自动晋级 ==');
-// 用赵云杀怪
-const kz=Game.Battle.key(left[0],left[1]);
-const kz2=Game.Battle.key(right[0],right[1]);
-const h0=b.P.units[kz];
-h0.kills = CONFIG.HERO_KILLS_NEED(1); // 触发晋级阈值
-// 直接验证 kill 路径：造一个敌人并调用战斗逻辑不易，改为验证经验公式
+// 在当前战场拼一个赵云（已在牌组），验证武将可携带经验并晋级公式正确
+Game.State.toggleDeck('赵云');
+let c1=b.buildP[1], c2=null;
+for(let i=0;i<b.buildP.length;i++){ const p=b.buildP[i]; if(Math.abs(p[0]-c1[0])+Math.abs(p[1]-c1[1])===1){c2=p;break;} }
+const L2=c1[0]<c2[0]?c1:c2, R2=L2===c1?c2:c1;
+b.P.bench[0]={kind:'f',ch:'赵',lv:0,cd:0}; Game.Battle.dropUnit(b,b.P.bench[0],'b0',L2[0],L2[1]);
+b.P.bench[0]={kind:'f',ch:'云',lv:0,cd:0}; Game.Battle.dropUnit(b,b.P.bench[0],'b0',R2[0],R2[1]);
+const h0=b.P.units[Game.Battle.key(L2[0],L2[1])];
+h0.kills = CONFIG.HERO_KILLS_NEED(1);
+check('武将单位可携带经验', h0 && h0.kind==='g' && h0.kills>=1);
 check('晋级阈值函数', CONFIG.HERO_KILLS_NEED(1)>0);
 
 console.log('== 局外抽卡 ==');

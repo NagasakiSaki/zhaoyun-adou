@@ -154,6 +154,7 @@ Game.UI = (function () {
       '<div class="home-buttons main">' +
         '<button class="ink-btn gold" data-act="recruit">招 募</button>' +
         '<button class="ink-btn" data-act="heroes">武 将</button>' +
+        '<button class="ink-btn secondary" data-act="deck">牌 组</button>' +
         '<button class="ink-btn secondary" data-act="train">训 练</button>' +
         '<button class="ink-btn secondary" data-act="daily">每日</button>' +
       '</div>' +
@@ -178,6 +179,7 @@ Game.UI = (function () {
       else if (act === 'sound') Game.State.toggleSound();
       else if (act === 'recruit') openRecruit();
       else if (act === 'heroes') openHeroes();
+      else if (act === 'deck') openDeck();
       else if (act === 'train') openTrain();
       else if (act === 'daily') openDaily();
     });
@@ -316,6 +318,7 @@ Game.UI = (function () {
     else if (b.uiSel && b.uiSel.mode === 'benchChar') hint = '点击备战席要改写的汉字';
     else if (b.unlockMode) hint = '点击亮起的空地解锁建造格';
     else if (b.selCard >= 0) hint = '点/拖到亮起的空地放置';
+    else if (b.selInfo && b.selInfo.x == null && b.selInfo.range) hint = '攻击范围 ' + Math.round(b.selInfo.range * 10) / 10 + ' 格';
     else if (b.waveState === 'idle' || b.waveState === 'cleared') hint = '下一波 ' + Math.max(0, b.restTimer).toFixed(1) + 's';
     else hint = '拖动备战席卡牌上阵 · 抵御进攻…';
     set('res-hint', hint);
@@ -476,6 +479,42 @@ Game.UI = (function () {
       closeModal();
       openHeroes();
     });
+  }
+
+  /* ================= 牌组 ================= */
+  function openDeck() {
+    var meta = Game.State.state.meta;
+    var slots = meta.deckSlots || CONFIG.DECK.baseSlots;
+    var card = openModal(
+      '<div class="modal-title">牌 组</div>' +
+      '<p style="font-size:12px;color:#8a7d66;text-align:center">上阵牌组（' + meta.deck.length + '/' + slots + '）：牌库只出牌组里的字，只有牌组武将可上阵。</p>' +
+      '<div style="text-align:center;margin:8px 0"><button class="ink-btn secondary" id="deck-unlock">扩容 +1槽（' + CONFIG.DECK.unlockCost + '元宝）</button></div>' +
+      '<div id="deck-list"></div>'
+    );
+    var list = card.querySelector('#deck-list');
+    var html = '';
+    for (var k in DATA.HEROES) {
+      var name = DATA.HEROES[k].name;
+      if (meta.heroes[name] === undefined) continue;
+      var inDeck = meta.deck.indexOf(name) >= 0;
+      var rarity = DATA.HERO_RARITY[name] || 1;
+      html += '<div class="weapon-cell" data-name="' + name + '">' +
+        '<div class="hero-seal" style="background:' + DATA.RARITY_COLOR[rarity] + '">' + name + '</div>' +
+        '<div class="w-info"><div class="w-name">' + name + '</div></div>' +
+        '<div style="flex:none">' + (inDeck ? '<span style="color:#3f9d4f;font-size:13px">已入组</span>' : '<span style="color:#aaa;font-size:13px">未入组</span>') + '</div>' +
+        '<div class="w-info" style="text-align:right;flex:none">' +
+          '<button class="ink-btn" style="padding:4px 8px;font-size:13px">' + (inDeck ? '撤下' : '入组') + '</button>' +
+        '</div></div>';
+    }
+    list.innerHTML = html;
+    var btns = list.querySelectorAll('[data-name]');
+    for (var j = 0; j < btns.length; j++) btns[j].querySelector('button').addEventListener('click', function (e) {
+      e.stopPropagation();
+      Game.State.toggleDeck(this.parentNode.parentNode.dataset.name);
+      openDeck();
+    });
+    var un = card.querySelector('#deck-unlock');
+    if (un) un.addEventListener('click', function () { Game.State.unlockDeckSlot(); openDeck(); });
   }
 
   /* ================= 兵种训练 ================= */
@@ -748,6 +787,7 @@ Game.UI = (function () {
     openCheat: openCheat,
     openRecruit: openRecruit,
     openHeroes: openHeroes,
+    openDeck: openDeck,
     openTrain: openTrain,
     openDaily: openDaily,
     closeModal: closeModal,

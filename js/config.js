@@ -48,6 +48,13 @@ window.CONFIG = {
     yuanbaoBoss: 30
   },
 
+  // ---- 牌组（植物大战僵尸式上阵阵容） ----
+  DECK: {
+    baseSlots: 8,
+    maxSlots: 12,
+    unlockCost: 500   // 元宝扩容1个槽位
+  },
+
   // ---- 每日任务 / 成就 ----
   DAILY: {
     quests: [
