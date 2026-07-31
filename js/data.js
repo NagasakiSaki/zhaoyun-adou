@@ -1,72 +1,123 @@
-/* data.js —— 全部静态数据表 */
+/* data.js —— 数据表：路径地图 / 兵种 / 武将 / 敌人 / 武器 / 道具 / 军衔 */
 window.DATA = {
-  UNITS: {
-    jian: { name: '刀兵', ch: '刀', hp: 120, atk: 15, atkRange: 1.0, atkSpeed: 1.0, moveSpeed: 1.0, note: '均衡近战', knockback: 0.25 },
-    qiang: { name: '枪兵', ch: '枪', hp: 90, atk: 18, atkRange: 1.5, atkSpeed: 0.8, moveSpeed: 0.9, note: '穿刺', pierce: 2 },
-    gong: { name: '弓兵', ch: '弓', hp: 60, atk: 12, atkRange: 4.0, atkSpeed: 1.2, moveSpeed: 0.9, note: '远程', ranged: true },
-    qi: { name: '骑兵', ch: '骑', hp: 150, atk: 20, atkRange: 1.0, atkSpeed: 0.7, moveSpeed: 1.6, note: '高速突进' }
+
+  // ---- 兵种：刀枪弓骑，同字同级二合一升级（1~5级） ----
+  SOLDIERS: {
+    '刀': { name: '刀兵', dmg: 16, itv: 0.75, range: 1.35, hp: 120 },
+    '枪': { name: '枪兵', dmg: 24, itv: 0.95, range: 1.8,  hp: 110 },
+    '弓': { name: '弓兵', dmg: 13, itv: 0.55, range: 3.2,  hp: 80  },
+    '骑': { name: '骑兵', dmg: 34, itv: 1.15, range: 1.5,  hp: 150 }
   },
 
+  // ---- 武将：征兵抽金色单字碎片，拼齐姓名觉醒 ----
   HEROES: {
-    zhaoyun:  { name: '赵云', ch: '云', recipe: ['赵', '云'], weapon: 'qiang', rarity: 5, hp: 260, atk: 34, atkRange: 1.5, atkSpeed: 0.9, skill: 'lance',  skillCd: 6,  skillName: '龙胆突刺', skillDesc: '沿路贯穿4敌·300%攻击' },
-    guanyu:   { name: '关羽', ch: '羽', recipe: ['关', '羽'], weapon: 'jian',  rarity: 5, hp: 280, atk: 40, atkRange: 1.0, atkSpeed: 0.9, skill: 'sweep',  skillCd: 5,  skillName: '青龙偃月', skillDesc: '横扫前方2行·200%攻击+击退' },
-    zhangfei: { name: '张飞', ch: '飞', recipe: ['张', '飞'], weapon: 'qiang', rarity: 5, hp: 300, atk: 38, atkRange: 1.5, atkSpeed: 0.8, skill: 'roar',   skillCd: 10, skillName: '当阳怒吼', skillDesc: '范围怒吼·250%攻击+眩晕' },
-    machao:   { name: '马超', ch: '超', recipe: ['马', '超'], weapon: 'qi',    rarity: 5, hp: 260, atk: 36, atkRange: 1.0, atkSpeed: 0.8, moveSpeed: 1.8, skill: 'charge', skillCd: 9,  skillName: '铁骑冲锋', skillDesc: '冲锋3行·400%攻击' },
-    huangzhong: { name: '黄忠', ch: '忠', recipe: ['黄', '忠'], weapon: 'gong', rarity: 5, hp: 180, atk: 40, atkRange: 5.0, atkSpeed: 1.1, skill: 'volley', skillCd: 14, skillName: '百步穿杨', skillDesc: '全屏射击·150%攻击' },
-    liubei:   { name: '刘备', ch: '备', recipe: ['刘', '备'], weapon: 'jian',  rarity: 5, hp: 240, atk: 26, atkRange: 1.0, atkSpeed: 0.9, skill: 'heal',   skillCd: 8,  skillName: '仁德之辉', skillDesc: '全队回血25%+阿斗回血15%' },
-    caocao:   { name: '曹操', ch: '操', recipe: ['曹', '操'], weapon: 'jian',  rarity: 5, hp: 320, atk: 42, atkRange: 1.0, atkSpeed: 0.8, skill: 'cleave', skillCd: 16, skillName: '乱世枭雄', skillDesc: '全屏斩·180%攻击' },
-    guanxing: { name: '关兴', ch: '兴', recipe: ['关', '兴'], weapon: 'jian',  rarity: 4, hp: 170, atk: 24, atkRange: 1.0, atkSpeed: 1.0, skill: 'sweep',  skillCd: 6,  skillName: '父志横扫', skillDesc: '横扫前方2行·180%攻击' },
-    zhangbao: { name: '张苞', ch: '苞', recipe: ['张', '苞'], weapon: 'qiang', rarity: 4, hp: 160, atk: 22, atkRange: 1.5, atkSpeed: 1.0, skill: 'roar',   skillCd: 11, skillName: '英魂怒吼', skillDesc: '范围怒吼·200%攻击+眩晕' },
-    huangzu:  { name: '黄祖', ch: '祖', recipe: ['黄', '祖'], weapon: 'gong',  rarity: 4, hp: 130, atk: 26, atkRange: 5.0, atkSpeed: 1.1, skill: 'bounce', skillCd: 8,  skillName: '连珠箭', skillDesc: '弹射2敌·160%攻击' },
-    huanggai: { name: '黄盖', ch: '盖', recipe: ['黄', '盖'], weapon: 'jian',  rarity: 4, hp: 190, atk: 26, atkRange: 1.0, atkSpeed: 0.9, skill: 'shield', skillCd: 10, skillName: '苦肉铁壁', skillDesc: '自身+护盾与攻击提升' }
+    zhaoyun:  { name: '赵云', recipe: ['赵', '云'], dmg: 90,  itv: 0.70, range: 3.2, skill: 'pierce',  desc: '龙胆·贯穿直线' },
+    guanyu:   { name: '关羽', recipe: ['关', '羽'], dmg: 80,  itv: 0.90, range: 2.2, skill: 'sweep',   desc: '青龙·横扫前方' },
+    zhangfei: { name: '张飞', recipe: ['张', '飞'], dmg: 70,  itv: 1.20, range: 2.0, skill: 'stun',    desc: '当阳·范围眩晕' },
+    machao:   { name: '马超', recipe: ['马', '超'], dmg: 130, itv: 1.30, range: 2.4, skill: 'smash',   desc: '神威·重击单敌' },
+    huangzhong: { name: '黄忠', recipe: ['黄', '忠'], dmg: 55, itv: 0.40, range: 4.5, skill: 'snipe',  desc: '百步·超远速射' },
+    liubei:   { name: '刘备', recipe: ['刘', '备'], dmg: 30,  itv: 1.00, range: 2.5, skill: 'aura',    desc: '仁德·友军攻击+' },
+    caocao:   { name: '曹操', recipe: ['曹', '操'], dmg: 60,  itv: 1.10, range: 3.5, skill: 'volley',  desc: '乱世·全屏斩击' },
+    guanxing: { name: '关兴', recipe: ['关', '兴'], dmg: 55,  itv: 0.95, range: 2.0, skill: 'sweep',   desc: '父志·横扫' },
+    zhangbao: { name: '张苞', recipe: ['张', '苞'], dmg: 50,  itv: 1.10, range: 1.8, skill: 'stun',    desc: '英魂·范围眩晕' },
+    huanggai: { name: '黄盖', recipe: ['黄', '盖'], dmg: 45,  itv: 1.20, range: 1.6, skill: 'fortify', desc: '苦肉·己方增伤' }
   },
 
-  CHARS: {
-    weights: {
-      '赵': 11, '云': 10, '关': 13, '羽': 10, '张': 13, '飞': 10,
-      '马': 9, '超': 9, '黄': 14, '忠': 10, '刘': 8, '备': 8,
-      '曹': 8, '操': 8, '兴': 7, '苞': 7, '祖': 7, '盖': 7
+  // 碎片字权重
+  FRAG_WEIGHTS: {
+    '赵': 11, '云': 10, '关': 12, '羽': 10, '张': 12, '飞': 10,
+    '马': 9, '超': 9, '黄': 13, '忠': 10, '刘': 8, '备': 8,
+    '曹': 8, '操': 8, '兴': 7, '苞': 7, '盖': 7
+  },
+
+  // ---- 敌人（双方同时受波；沿各自路径冲向守将，漏怪扣心） ----
+  ENEMIES: {
+    zei:  { ch: '贼', hp: 60,   spd: 1.05, mantou: 2, size: 0.62 },
+    fei:  { ch: '匪', hp: 150,  spd: 1.5,  mantou: 4, size: 0.60 },
+    dao:  { ch: '盗', hp: 130,  spd: 0.9,  mantou: 3, size: 0.66 },
+    kou:  { ch: '寇', hp: 280,  spd: 0.75, mantou: 5, size: 0.70 },
+    boss: { ch: '将', hp: 1100, spd: 0.5,  mantou: 30, size: 0.95, boss: true }
+  },
+
+  // ---- 地图（参考版：8×10，玩家侧路径 + 建造格；敌方=180°镜像） ----
+  // pPath: 从出怪口(上)到守将(下)的单条连续路径；pBuild: 初始建造格(≥8)
+  MAPS: {
+    julushou: {
+      name: '巨鹿', theme: 'volcano',
+      pPath: [
+        [0, 9], [1, 9], [2, 9], [3, 9], [3, 8], [3, 7], [4, 7], [5, 7], [6, 7], [6, 8], [6, 9], [7, 9]
+      ],
+      pBuild: [
+        [1, 8], [2, 8], [4, 8], [5, 8], [1, 6], [2, 6], [4, 6], [5, 6]
+      ]
+    },
+    yunmengze: {
+      name: '云梦泽', theme: 'sand',
+      pPath: [
+        [0, 9], [1, 9], [1, 8], [1, 7], [2, 7], [3, 7], [4, 7], [5, 7], [6, 7], [6, 8], [6, 9], [7, 9]
+      ],
+      pBuild: [
+        [0, 8], [2, 8], [4, 8], [5, 8], [7, 8], [0, 6], [2, 6], [4, 6], [5, 6], [7, 6]
+      ]
+    },
+    hulaoguan: {
+      name: '虎牢关', theme: 'cave',
+      pPath: [
+        [0, 9], [0, 8], [0, 7], [1, 7], [2, 7], [3, 7], [4, 7], [5, 7], [6, 7], [7, 7], [7, 8], [7, 9]
+      ],
+      pBuild: [
+        [2, 9], [5, 9], [2, 8], [4, 8], [5, 8], [1, 6], [3, 6], [4, 6], [6, 6]
+      ]
+    },
+    chibi: {
+      name: '赤壁', theme: 'water',
+      pPath: [
+        [0, 9], [1, 9], [2, 9], [3, 9], [4, 9], [4, 8], [4, 7], [5, 7], [6, 7], [7, 7], [7, 8], [7, 9]
+      ],
+      pBuild: [
+        [5, 9], [6, 9], [0, 8], [1, 8], [2, 8], [3, 8], [5, 8], [6, 8], [1, 6], [4, 6], [6, 6]
+      ]
+    },
+    changbanpo: {
+      name: '长坂坡', theme: 'petal',
+      pPath: [
+        [0, 9], [1, 9], [2, 9], [2, 8], [2, 7], [3, 7], [4, 7], [5, 7], [5, 8], [5, 9], [6, 9], [7, 9]
+      ],
+      pBuild: [
+        [0, 8], [1, 8], [3, 8], [4, 8], [6, 8], [7, 8], [0, 6], [1, 6], [3, 6], [4, 6], [6, 6], [7, 6]
+      ]
     }
   },
+  MAP_ORDER: ['julushou', 'yunmengze', 'hulaoguan', 'chibi', 'changbanpo'],
 
-  ENEMIES: {
-    jian:  { name: '刀兵', ch: '刀', hp: 80, atk: 11, atkRange: 1.0, atkSpeed: 1.0, moveSpeed: 0.9, bounty: 3 },
-    qiang: { name: '枪兵', ch: '枪', hp: 65, atk: 13, atkRange: 1.5, atkSpeed: 0.8, moveSpeed: 0.9, bounty: 3, pierce: 2 },
-    gong:  { name: '弓兵', ch: '弓', hp: 50, atk: 10, atkRange: 4.0, atkSpeed: 1.1, moveSpeed: 0.8, bounty: 3, ranged: true },
-    qi:    { name: '骑兵', ch: '骑', hp: 100, atk: 15, atkRange: 1.0, atkSpeed: 0.7, moveSpeed: 1.4, bounty: 4 },
-    boss_huangjin: { name: '黄巾力士', ch: '将', hp: 900, atk: 32, atkRange: 1.0, atkSpeed: 0.8, moveSpeed: 0.7, bounty: 30, isBoss: true }
-  },
-
-  WEAPONS: {
-    1: { name: '铁脊刃', atkBonus: 0.10, spdBonus: 0, crit: 0, lifesteal: 0, skillCdBonus: 0 },
-    2: { name: '百炼锋', atkBonus: 0.20, spdBonus: 0.05, crit: 0, lifesteal: 0, skillCdBonus: 0 },
-    3: { name: '青虹宝器', atkBonus: 0.35, spdBonus: 0, crit: 0.10, lifesteal: 0, skillCdBonus: 0 },
-    4: { name: '寒光神兵', atkBonus: 0.55, spdBonus: 0, crit: 0.05, lifesteal: 0.05, skillCdBonus: 0.05 },
-    5: { name: '龙胆亮银枪', atkBonus: 0.80, spdBonus: 0.05, crit: 0.10, lifesteal: 0.08, skillCdBonus: 0.15 }
-  },
-
-  ITEMS: {
-    shenbingfu:  { name: '神兵符', type: 'active', price: 120, emoji: '符', desc: '选中我方单位+1级并无敌3秒' },
-    gongsufu:    { name: '攻速符', type: 'active', price: 100, emoji: '速', desc: '全体攻速+50%持续8秒' },
-    maobi:       { name: '毛笔', type: 'active', price: 80, emoji: '笔', desc: '把兵营一个汉字改写为随机字' },
-    zhaoxianling:{ name: '招贤令', type: 'active', price: 300, emoji: '令', desc: '直接招募一名武将入营' },
-    nongmin:     { name: '农民', type: 'passive', price: 200, emoji: '农', desc: '永久 +6 馒头/波' },
-    luoyangchan: { name: '洛阳铲', type: 'active', price: 150, emoji: '铲', desc: '向上解锁一行格位' }
-  },
-
+  // ---- 每日 buff（适配新模型：兵种攻击/征兵/馒头/武技） ----
   DAILY_BUFFS: [
-    { key: 'bowAtk', name: '今日·弓兵攻击 +20%', type: 'atkKind', kind: 'gong', mul: 1.2 },
-    { key: 'jianHp', name: '今日·刀兵生命 +20%', type: 'hpKind', kind: 'jian', mul: 1.2 },
+    { key: 'bowAtk', name: '今日·弓兵攻击 +20%', type: 'atkChar', ch: '弓', mul: 1.2 },
+    { key: 'jianAtk', name: '今日·刀兵攻击 +20%', type: 'atkChar', ch: '刀', mul: 1.2 },
     { key: 'recruitDisc', name: '今日·征兵消耗 -15%', type: 'recruitCost', mul: 0.85 },
     { key: 'startBuns', name: '今日·开局馒头 +30', type: 'startBuns', val: 30 },
-    { key: 'heroSkill', name: '今日·武将技能CD -20%', type: 'skillCd', mul: 0.8 }
+    { key: 'heroAtk', name: '今日·武将攻击 +15%', type: 'heroAtk', mul: 1.15 }
   ],
 
-  MAPS: {
-    julushou:  { name: '巨鹿', rows: 6, cols: 5, blocked: [] },
-    yunmengze: { name: '云梦泽', rows: 7, cols: 6, blocked: [[3, 0], [3, 5]] },
-    hulaoguan: { name: '虎牢关', rows: 6, cols: 6, blocked: [[2, 0], [2, 5], [3, 0], [3, 5]] },
-    chibi:     { name: '赤壁', rows: 8, cols: 7, blocked: [[3, 0], [3, 6], [4, 0], [4, 6]] }
+  // ---- 武器（保留原系统：每英雄按品阶配神兵） ----
+  WEAPONS: {
+    1: { name: '铁脊刃', dmg: 8,  quality: 1 },
+    2: { name: '百炼锋', dmg: 18, quality: 2 },
+    3: { name: '青虹宝器', dmg: 30, quality: 3 },
+    4: { name: '寒光神兵', dmg: 50, quality: 4 },
+    5: { name: '龙胆亮银枪', dmg: 80, quality: 5 }
+  },
+  WEAPON_TIER_NAME: { 1: '白', 2: '绿', 3: '蓝', 4: '紫', 5: '金' },
+  WEAPON_TIER_COLOR: { 1: '#ececec', 2: '#3f9d4f', 3: '#2f6fd0', 4: '#7a4fb0', 5: '#d9a93b' },
+
+  // ---- 道具（神秘商人） ----
+  ITEMS: {
+    shenbingfu:  { name: '神兵符', type: 'active', price: 120, emoji: '符', desc: '选中我方单位+1级并无敌3秒' },
+    gongsufu:    { name: '攻速符', type: 'active', price: 100, emoji: '速', desc: '全体攻击速度+50%持续8秒' },
+    maobi:       { name: '毛笔', type: 'active', price: 80, emoji: '笔', desc: '把备战席一个汉字改写为随机字' },
+    zhaoxianling:{ name: '招贤令', type: 'active', price: 300, emoji: '令', desc: '直接招募一名武将入席' },
+    nongmin:     { name: '农民', type: 'passive', price: 200, emoji: '农', desc: '永久 +3 馒头/波' },
+    luoyangchan: { name: '洛阳铲', type: 'active', price: 150, emoji: '铲', desc: '解锁一块空地建造格' }
   },
 
   AVATARS: [
@@ -80,38 +131,4 @@ window.DATA = {
   ],
 
   RANK_NAMES: ['白身', '什长', '百夫长', '军司马', '校尉', '中郎将', '偏将军', '裨将军', '安国将军', '镇国将军', '骠骑将军', '车骑将军', '大将军', '前将军', '左将军', '右将军', '后将军', '上柱国', '丞相', '大司马']
-};
-
-// 主线波次：按关卡程序化生成，每关 3 波，第 3 波带 BOSS
-DATA.buildCampaignWaves = function (stage) {
-  var waves = [];
-  var w1 = [{ k: 'jian', n: 1 + Math.ceil(stage / 2) }, { k: 'gong', n: 1 + Math.floor(stage / 2) }];
-  var w2 = [{ k: 'qi', n: 1 + Math.ceil(stage / 2) }, { k: 'qiang', n: 1 + Math.floor(stage / 2) }];
-  var w3 = [{ k: 'boss_huangjin', n: 1 }, { k: 'gong', n: 1 + Math.ceil(stage / 2) }, { k: 'jian', n: 1 + Math.floor(stage / 2) }];
-  var spread = 12 + stage * 2;
-  waves.push({ groups: w1, spread: spread });
-  waves.push({ groups: w2, spread: spread });
-  waves.push({ groups: w3, spread: spread + 3 });
-  return waves;
-};
-
-// 无尽模式单波：程序化生成
-DATA.buildEndlessWave = function (w) {
-  var n = Math.min(40, Math.round(CONFIG.ENDLESS.countBase + w * CONFIG.ENDLESS.countPer));
-  var pool = ['jian', 'gong', 'qiang'];
-  if (w >= 4) pool.push('qi');
-  var groups = [];
-  var poolCount = {};
-  for (var i = 0; i < n; i++) {
-    var k = pool[Math.floor(Math.random() * pool.length)];
-    poolCount[k] = (poolCount[k] || 0) + 1;
-  }
-  for (var key in poolCount) {
-    groups.push({ k: key, n: poolCount[key] });
-  }
-  if (w % CONFIG.ENDLESS.bossEvery === 0 && w > 0) {
-    groups.push({ k: 'boss_huangjin', n: 1 + Math.floor(w / CONFIG.ENDLESS.bossEvery) });
-  }
-  var interval = Math.max(CONFIG.ENDLESS.intervalMin, CONFIG.ENDLESS.intervalBase - w * CONFIG.ENDLESS.intervalDecay);
-  return { groups: groups, spread: interval };
 };

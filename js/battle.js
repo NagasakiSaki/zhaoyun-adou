@@ -1,594 +1,546 @@
-/* battle.js —— 战斗引擎：网格/实体/固定步长/lane交战/弹道/技能/波次/胜负 */
+/* battle.js —— 路径塔防引擎（参考版模型）：红心守将 / 同波镜像 / 静态塔输出 */
 Game.Battle = (function () {
   var CONFIG = window.CONFIG, DATA = window.DATA, U = window.Game.Utils;
   var STEP = CONFIG.STEP;
-  var uidSeq = 1;
-  function newId() { return uidSeq++; }
 
-  /* ================= 数值计算 ================= */
-  function soldierStats(kind, level, rarity, buff) {
-    var u = DATA.UNITS[kind];
-    var g = CONFIG.LEVEL_GROWTH, m = CONFIG.RARITY_MUL[rarity] || 1;
-    var hp = u.hp * Math.pow(g.hp, level - 1) * m;
-    var atk = u.atk * Math.pow(g.atk, level - 1) * m;
-    if (buff) {
-      if (buff.type === 'hpKind' && buff.kind === kind) hp *= buff.mul;
-      if (buff.type === 'atkKind' && buff.kind === kind) atk *= buff.mul;
-    }
-    return { hp: Math.round(hp), atk: Math.round(atk), atkRange: u.atkRange, atkSpeed: u.atkSpeed, moveSpeed: u.moveSpeed, ranged: !!u.ranged, pierce: u.pierce || 1, knockback: u.knockback || 0 };
-  }
-  function heroStats(heroKey, level, weapon, buff) {
-    var h = DATA.HEROES[heroKey];
-    var g = CONFIG.LEVEL_GROWTH, m = CONFIG.RARITY_MUL[h.rarity] || 1;
-    var hp = h.hp * Math.pow(g.hp, level - 1) * m * 1.1;
-    var atk = h.atk * Math.pow(g.atk, level - 1) * m * 1.1;
-    var atkSpeed = h.atkSpeed, crit = 0, lifesteal = 0, skillCdMul = 1;
-    if (weapon) {
-      var w = DATA.WEAPONS[weapon.tier];
-      atk *= (1 + w.atkBonus);
-      atkSpeed *= (1 + (w.spdBonus || 0));
-      crit = w.crit || 0; lifesteal = w.lifesteal || 0;
-      skillCdMul *= (1 - (w.skillCdBonus || 0));
-    }
-    if (buff && buff.type === 'skillCd') skillCdMul *= buff.mul;
-    return {
-      hp: Math.round(hp), atk: Math.round(atk), atkRange: h.atkRange, atkSpeed: atkSpeed,
-      moveSpeed: h.moveSpeed || 1, ranged: h.weapon === 'gong', pierce: h.weapon === 'qiang' ? 2 : 1,
-      crit: crit, lifesteal: lifesteal, skillCdMul: skillCdMul, heroDef: h, weaponType: h.weapon
-    };
-  }
-  function enemyStats(kind, hpMul, atkMul, wave) {
-    var e = DATA.ENEMIES[kind];
-    var hp = e.hp * hpMul * (1 + 0.04 * wave);
-    var atk = e.atk * atkMul * (1 + 0.02 * wave);
-    return { hp: Math.round(hp), atk: Math.round(atk), atkRange: e.atkRange, atkSpeed: e.atkSpeed, moveSpeed: e.moveSpeed, ranged: !!e.ranged, pierce: e.pierce || 1 };
-  }
-
-  /* ================= 实体 ================= */
-  function makeUnit(cfg) {
-    var s = cfg.stats;
-    return {
-      id: newId(), side: cfg.side, kind: cfg.kind,
-      isHero: !!cfg.heroKey, heroKey: cfg.heroKey || null,
-      level: cfg.level || 1, rarity: cfg.rarity || 1,
-      col: cfg.col, row: cfg.row,
-      hp: s.hp, maxHp: s.hp, atk: s.atk,
-      atkRange: s.atkRange, atkSpeed: s.atkSpeed, atkCd: Math.random() * 0.3,
-      moveSpeed: cfg.moveSpeed !== undefined ? cfg.moveSpeed : (s.moveSpeed || 1),
-      ranged: !!s.ranged, pierce: s.pierce || 1,
-      skill: s.skill || null,
-      skillCd: (s.skillInterval || 0) ? s.skillInterval * 0.6 : 0,
-      skillInterval: s.skillInterval || 0,
-      skillName: s.heroDef ? s.heroDef.skillName : null,
-      heroDef: s.heroDef || null,
-      weaponType: s.weaponType || null, weapon: cfg.weapon || null,
-      crit: s.crit || 0, lifesteal: s.lifesteal || 0,
-      invincibleUntil: 0, atkSpeedBuffUntil: 0, stunUntil: 0, shield: 0,
-      assault: false, // 已抵达敌方阿斗，持续冲击
-      bounty: cfg.bounty || 0, isBoss: !!cfg.isBoss,
-      knockback: s.knockback || 0,
-      dead: false
-    };
-  }
-
-  function buildCells(map) {
-    var cells = [];
-    for (var r = 0; r < map.rows; r++) {
-      var row = [];
-      for (var c = 0; c < map.cols; c++) row.push({ blocked: false });
-      cells.push(row);
-    }
-    (map.blocked || []).forEach(function (b) { cells[b[0]][b[1]].blocked = true; });
-    // 阿斗格不标记为障碍（否则会挡住出生路径），单独在放置/出生时排除
-    return cells;
+  function key(c, r) { return c + '_' + r; }
+  function mirrorPoint(p) { return [CONFIG.COLS - 1 - p[0], CONFIG.ROWS - 1 - p[1]]; }
+  function heroByName(name) {
+    for (var k in DATA.HEROES) if (DATA.HEROES[k].name === name) return DATA.HEROES[k];
+    return null;
   }
 
   /* ================= 对局建立 ================= */
   function setup(mode, mapKey, dailyBuff, meta, stage) {
     var map = DATA.MAPS[mapKey];
+    var pathP = map.pPath;
+    var pathE = map.pPath.map(mirrorPoint);
+    var buildP = map.pBuild;
+    var buildE = map.pBuild.map(mirrorPoint);
+    var pathPPts = pathP.map(function (q) { return [q[0] + 0.5, q[1] + 0.5]; });
+    var pathEPts = pathE.map(function (q) { return [q[0] + 0.5, q[1] + 0.5]; });
+    var cellType = {};
+    for (var c = 0; c < CONFIG.COLS; c++) for (var r = 0; r < CONFIG.ROWS; r++) cellType[key(c, r)] = 'block';
+    pathP.concat(pathE).forEach(function (p) { cellType[key(p[0], p[1])] = 'path'; });
+    buildP.forEach(function (p) { cellType[key(p[0], p[1])] = 'build_p'; });
+    buildE.forEach(function (p) { cellType[key(p[0], p[1])] = 'build_e'; });
+
     var b = {
-      mode: mode, mapKey: mapKey, map: map, rows: map.rows, cols: map.cols,
-      cells: buildCells(map), centerCol: Math.floor(map.cols / 2),
-      playerZoneMin: Math.max(1, map.rows - 2 - (meta.shovelBonus || 0)),
-      enemyZoneMax: 1,
-      time: 0, speed: 1, paused: false,
-      buns: (mode === 'arena' ? CONFIG.ARENA.playerStartBuns : CONFIG.BUNS_START) + (dailyBuff && dailyBuff.type === 'startBuns' ? dailyBuff.val : 0),
+      mode: mode, mapKey: mapKey, map: map,
+      cols: CONFIG.COLS, rows: CONFIG.ROWS,
+      pathP: pathP, pathE: pathE, buildP: buildP, buildE: buildE,
+      pathPPts: pathPPts, pathEPts: pathEPts, cellType: cellType,
+      solo: mode !== 'arena',
+      P: newSide(dailyBuff), E: newSide(dailyBuff),
+      enemies: [], bullets: [],
+      wave: 0, waveState: 'idle', spawnQueue: [], spawnTimer: 0,
+      restTimer: CONFIG.INTERMISSION,
+      maxWave: mode === 'endless' ? Infinity : (mode === 'arena' ? CONFIG.MAX_WAVE : CONFIG.WAVES_PER_STAGE),
+      stageOffset: mode === 'campaign' ? (stage - 1) * CONFIG.WAVES_PER_STAGE : 0,
+      stage: stage || 1,
+      dailyBuff: dailyBuff, farmerIncome: (meta.farmerLevel || 0) * CONFIG.FARMER_BONUS,
+      activeItems: [null, null], weapons: meta.weapons || {},
+      drops: [],
+      time: 0, speed: 1, paused: false, result: null,
+      selCard: -1, unlockMode: false, uiSel: null,
+      _acc: 0, _auraP: 1, _auraE: 1
+    };
+    // AI 初始手牌
+    if (!b.solo) {
+      for (var i = 0; i < b.E.bench.length; i++) b.E.bench[i] = rollCard(b.E, CONFIG.ARENA.luck);
+    }
+    var pending = meta.pendingActiveItems || [];
+    for (var j = 0; j < pending.length; j++) addActiveItem(b, pending[j]);
+    return b;
+  }
+
+  function newSide(dailyBuff) {
+    return {
+      mantou: CONFIG.ECON.startMantou + (dailyBuff && dailyBuff.type === 'startBuns' ? dailyBuff.val : 0),
       recruitCount: 0,
       bench: new Array(CONFIG.BENCH_SIZE).fill(null),
-      dailyBuff: dailyBuff || null,
-      units: [], projectiles: [],
-      adou: (function () {
-        var hp = mode === 'arena' ? CONFIG.ARENA.adouHp : CONFIG.ADOU_HP;
-        return { player: { hp: hp, maxHp: hp }, enemy: { hp: hp, maxHp: hp } };
-      })(),
-      activeItems: [null, null],
-      farmerIncome: (meta.farmerLevel || 0) * CONFIG.FARMER_BONUS,
-      weapons: meta.weapons || {},
-      aiStatMul: mode === 'arena' ? CONFIG.ARENA.aiUnitStatMul : 1,
-      waveIdx: 0, phase: mode === 'arena' ? 'active' : 'intermission',
-      intermission: CONFIG.WAVE_INTERMISSION,
-      spawnQueue: [], spawnTotal: 0, spawned: 0, enemyAlive: 0,
-      passiveIncome: mode === 'arena' ? CONFIG.ARENA.playerPassiveIncome : 0,
-      ai: null, result: null, selBench: -1,
-      uiSel: null, // {mode:'unit'|'benchChar', itemSlot:0}
-      endlessWave: 0, stage: stage || 1, bannerText: null,
-      _acc: 0
+      units: {}, hearts: CONFIG.ECON.hearts, shakeT: 0
     };
-    if (mode === 'campaign') {
-      b.waveList = DATA.buildCampaignWaves(stage);
+  }
+
+  /* ================= 单位属性 ================= */
+  function unitStats(u, side, b) {
+    if (u.kind === 's') {
+      var s = DATA.SOLDIERS[u.ch];
+      var dmg = s.dmg * CONFIG.lvMul(u.lv);
+      if (b.dailyBuff && b.dailyBuff.type === 'atkChar' && b.dailyBuff.ch === u.ch) dmg *= b.dailyBuff.mul;
+      return { dmg: Math.round(dmg), itv: s.itv, range: s.range, ch: u.ch };
     }
-    if (mode === 'arena') {
-      b.ai = Game.AI.init(b);
+    if (u.kind === 'g') {
+      var h = heroByName(u.name);
+      if (!h) return { inert: true };
+      var dmg = h.dmg;
+      if (side === 'P' && b.weapons[u.name]) dmg += DATA.WEAPONS[b.weapons[u.name].tier].dmg;
+      if (u.dmgBonus) dmg *= (1 + u.dmgBonus);
+      if (b.dailyBuff && b.dailyBuff.type === 'heroAtk') dmg *= b.dailyBuff.mul;
+      return { dmg: Math.round(dmg), itv: h.itv, range: h.range, skill: h.skill, hero: true, name: u.name };
     }
-    return b;
+    return { inert: true };
+  }
+
+  function auraOf(b, side) {
+    var S = side === 'P' ? b.P : b.E;
+    var m = 1;
+    for (var k in S.units) {
+      var u = S.units[k];
+      if (u.kind === 'g' && u.name === '刘备') m += 0.15;
+      if (u.kind === 'g' && u.name === '黄盖') m += 0.10;
+    }
+    return m;
+  }
+
+  /* ================= 征兵（整手替换） ================= */
+  function recruitCost(S) { return CONFIG.ECON.recruitBase + S.recruitCount * CONFIG.ECON.recruitInc; }
+
+  function ownedFragChars(S) {
+    var own = {};
+    for (var i = 0; i < S.bench.length; i++) if (S.bench[i] && S.bench[i].kind === 'f') own[S.bench[i].ch] = true;
+    return own;
+  }
+  function rollCard(S, luck) {
+    luck = Math.max(0, Math.min(1, luck || 0));
+    var wShovel = 4 * (1 - luck * 0.75);
+    var wFrag = 26 + luck * 6;
+    var wSoldier = 70;
+    var total = wSoldier + wShovel + wFrag;
+    var roll = Math.random() * total;
+    var acc = 0;
+    acc += wSoldier;
+    if (roll < acc) return { kind: 's', ch: U.pick(CONFIG.SOLDIER_CHARS), lv: 1, cd: 0 };
+    acc += wShovel;
+    if (roll < acc) return { kind: 'shovel', ch: '铲', cd: 0 };
+    // 碎片：尽量补全已有碎片配对的另一半
+    var own = ownedFragChars(S);
+    var wants = [];
+    for (var hk in DATA.HEROES) {
+      var h = DATA.HEROES[hk];
+      if (own[h.recipe[0]] && !own[h.recipe[1]]) wants.push(h.recipe[1]);
+      if (own[h.recipe[1]] && !own[h.recipe[0]]) wants.push(h.recipe[0]);
+    }
+    var pairChance = 0.75 + luck * 0.2;
+    var fc = (wants.length && Math.random() < pairChance) ? U.pick(wants) : U.weightedPick(DATA.FRAG_WEIGHTS);
+    return { kind: 'f', ch: fc, lv: 0, cd: 0 };
+  }
+
+  function doRecruit(b, S, isPlayer) {
+    var cost = recruitCost(S);
+    if (S.mantou < cost) { if (isPlayer) Game.UI.toast('馒头不足'); return false; }
+    S.mantou -= cost;
+    S.recruitCount++;
+    for (var i = 0; i < CONFIG.BENCH_SIZE; i++) S.bench[i] = rollCard(S, isPlayer ? 0 : CONFIG.ARENA.luck);
+    autoMergeBench(b, S);
+    if (isPlayer) Game.Audio.play('recruit');
+    return true;
+  }
+
+  // 手牌自动合并：相同兵种同字同级 → 升级；相同碎片 → 随机改写
+  function autoMergeBench(b, S) {
+    for (var i = 0; i < S.bench.length; i++) {
+      var a = S.bench[i];
+      if (!a) continue;
+      if (a.kind === 's') {
+        for (var j = i + 1; j < S.bench.length; j++) {
+          var c = S.bench[j];
+          if (c && c.kind === 's' && c.ch === a.ch && c.lv === a.lv && a.lv < CONFIG.MAX_LV) {
+            a.lv++; S.bench[j] = null; i = -1;
+            if (S === b.P) Game.Audio.play('merge');
+            break;
+          }
+        }
+      } else if (a.kind === 'f') {
+        for (var k = i + 1; k < S.bench.length; k++) {
+          var d = S.bench[k];
+          if (d && d.kind === 'f' && d.ch === a.ch) {
+            var all = Object.keys(DATA.FRAG_WEIGHTS);
+            var nch = U.pick(all);
+            if (all.length > 1) while (nch === a.ch) nch = U.pick(all);
+            a.ch = nch; S.bench[k] = null; i = -1;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /* ================= 部署 / 合成 / 铲子 ================= */
+  function canPlaceUnit(b, c, r) { return b.cellType[key(c, r)] === 'build_p'; }
+  function canUnlock(b, c, r) {
+    return b.cellType[key(c, r)] === 'block' && r >= Math.floor(CONFIG.ROWS / 2);
+  }
+
+  // 放置手牌到格：'placed' | 'merged' | 'hero' | 'fail'
+  function placeCard(b, cardIdx, c, r) {
+    var k = key(c, r);
+    if (b.cellType[k] !== 'build_p') return 'fail';
+    var card = b.P.bench[cardIdx];
+    if (!card) return 'fail';
+    if (card.kind === 'shovel') return 'fail';
+    if (card.kind === 'f') { Game.UI.toast('碎片需拼字成武将再上阵'); return 'fail'; }
+    var target = b.P.units[k];
+    if (target) {
+      if (target.kind === 's' && card.kind === 's' && target.ch === card.ch && target.lv === card.lv && target.lv < CONFIG.MAX_LV) {
+        target.lv++;
+        b.P.bench[cardIdx] = null;
+        Game.Effects.burst(c + 0.5, r + 0.5, '#c9a227', 1.4);
+        Game.Audio.play('merge');
+        return 'merged';
+      }
+      Game.UI.toast('该格已有单位，需同字同级才能合成');
+      return 'fail';
+    }
+    b.P.units[k] = card;
+    b.P.bench[cardIdx] = null;
+    b.P.units[k].cd = 0; b.P.units[k].attackT = 0;
+    if (card.kind === 'g') { Game.Effects.heroSummon(c + 0.5, r + 0.5); Game.Audio.play('hero'); }
+    else { Game.Effects.burst(c + 0.5, r + 0.5, '#1a1a1a', 1); Game.Audio.play('place'); }
+    return 'placed';
+  }
+
+  function unlockCell(b, c, r) {
+    var k = key(c, r);
+    if (b.cellType[k] !== 'block' || r < Math.floor(CONFIG.ROWS / 2)) return false;
+    b.cellType[k] = 'build_p';
+    b.buildP.push([c, r]);
+    Game.Effects.burst(c + 0.5, r + 0.5, '#3f9d4f', 1.4);
+    Game.Audio.play('merge');
+    return true;
+  }
+
+  // 可合成武将
+  function availableHeroes(b) {
+    var out = [];
+    for (var k in DATA.HEROES) {
+      var h = DATA.HEROES[k];
+      var ok = true;
+      for (var i = 0; i < h.recipe.length; i++) {
+        var found = false;
+        for (var j = 0; j < b.P.bench.length; j++) {
+          if (b.P.bench[j] && b.P.bench[j].kind === 'f' && b.P.bench[j].ch === h.recipe[i]) { found = true; break; }
+        }
+        if (!found) { ok = false; break; }
+      }
+      if (ok) out.push(h.name);
+    }
+    return out;
+  }
+  function combineHero(b, name) {
+    var h = heroByName(name);
+    if (!h) return false;
+    var used = [];
+    for (var i = 0; i < h.recipe.length; i++) {
+      var idx = b.P.bench.findIndex(function (t) { return t && t.kind === 'f' && t.ch === h.recipe[i]; });
+      if (idx < 0) return false;
+      used.push(idx);
+    }
+    var empty = b.P.bench.indexOf(null);
+    if (empty < 0) { Game.UI.toast('备战席已满'); return false; }
+    used.forEach(function (ix) { b.P.bench[ix] = null; });
+    b.P.bench[empty] = { kind: 'g', name: name, ch: h.recipe[0], cd: 0, attackT: 0 };
+    Game.Effects.heroSummon(0, 0);
+    Game.Audio.play('hero');
+    return true;
+  }
+
+  /* ================= 主动道具 ================= */
+  function addActiveItem(b, id) {
+    for (var i = 0; i < b.activeItems.length; i++) {
+      if (b.activeItems[i] && b.activeItems[i].id === id) { b.activeItems[i].uses++; return true; }
+    }
+    for (var j = 0; j < b.activeItems.length; j++) {
+      if (!b.activeItems[j]) { b.activeItems[j] = { id: id, uses: 1 }; return true; }
+    }
+    return false;
+  }
+  function consumeItem(b, slot) {
+    var it = b.activeItems[slot];
+    if (!it) return;
+    it.uses--;
+    if (it.uses <= 0) b.activeItems[slot] = null;
+  }
+  function useActiveItem(b, slot) {
+    if (b.result || b.paused) return;
+    var item = b.activeItems[slot];
+    if (!item || item.uses <= 0) return;
+    switch (item.id) {
+      case 'gongsufu':
+        for (var k in b.P.units) { b.P.units[k].cd = Math.min(b.P.units[k].cd, 0.1); }
+        b._atkSpeedBuff = (b.time || 0) + 8;
+        consumeItem(b, slot); Game.Audio.play('skill'); break;
+      case 'shenbingfu':
+        b.uiSel = { mode: 'unit', itemSlot: slot }; Game.UI.toast('点击要强化的我方单位'); break;
+      case 'maobi':
+        b.uiSel = { mode: 'benchChar', itemSlot: slot }; Game.UI.toast('点击备战席要改写的汉字'); break;
+      case 'zhaoxianling': {
+        var names = Object.keys(DATA.HEROES).map(function (k) { return DATA.HEROES[k].name; });
+        var name = U.pick(names);
+        var empty = b.P.bench.indexOf(null);
+        if (empty < 0) { Game.UI.toast('备战席已满'); return; }
+        b.P.bench[empty] = { kind: 'g', name: name, ch: heroByName(name).recipe[0], cd: 0, attackT: 0 };
+        consumeItem(b, slot); Game.Audio.play('hero'); break;
+      }
+      case 'luoyangchan':
+        b.unlockMode = true; Game.UI.toast('点击一块空地解锁'); break;
+    }
   }
 
   /* ================= 主循环 ================= */
   function update(b, dt) {
-    if (b.result) return;
-    if (b.paused) return;
+    if (b.result || b.paused) return;
     dt = Math.min(dt, CONFIG.MAX_DT) * b.speed;
     b._acc = (b._acc || 0) + dt;
     var steps = 0;
-    while (b._acc >= STEP && steps < CONFIG.FIXED_STEPS_MAX) {
-      step(b);
-      b._acc -= STEP;
-      steps++;
-    }
+    while (b._acc >= STEP && steps < CONFIG.FIXED_STEPS_MAX) { step(b); b._acc -= STEP; steps++; }
   }
 
   function step(b) {
     b.time += STEP;
-    if (b.mode === 'arena') {
-      b.buns += b.passiveIncome * STEP;
-      Game.AI.update(b, STEP);
-    } else {
-      updateWaves(b);
-    }
-    updateUnits(b);
-    updateProjectiles(b);
+    updateWaves(b);
+    updateEnemies(b, STEP);
+    updateSide(b, 'P', STEP);
+    if (!b.solo) { updateSide(b, 'E', STEP); Game.AI.update(b, STEP); }
+    updateBullets(b, STEP);
     cleanup(b);
     checkEnd(b);
   }
 
   /* ================= 波次 ================= */
   function updateWaves(b) {
-    if (b.phase === 'intermission') {
-      b.intermission -= STEP;
-      if (b.intermission <= 0) beginWave(b);
-    } else if (b.phase === 'spawning') {
-      while (b.spawnQueue.length && b.spawnQueue[0].at <= b.time) {
-        var s = b.spawnQueue.shift();
-        spawnEnemy(b, s);
+    if (b.waveState === 'idle' || b.waveState === 'cleared') {
+      if (b.wave >= b.maxWave) { if (b.solo) endBattle(b, true); return; }
+      b.restTimer -= STEP;
+      if (b.restTimer <= 0) startNextWave(b);
+    }
+    if (b.waveState === 'spawning') {
+      b.spawnTimer -= STEP;
+      if (b.spawnTimer <= 0 && b.spawnQueue.length) {
+        var type = b.spawnQueue.shift();
+        spawn(b, type, 'P');
+        if (!b.solo) spawn(b, type, 'E');
+        b.spawnTimer = Math.max(0.4, 1.5 - b.wave * 0.07);
       }
-      if (!b.spawnQueue.length && b.spawned >= b.spawnTotal && b.enemyAlive <= 0) {
-        waveCleared(b);
-      }
+      if (!b.spawnQueue.length) b.waveState = 'fighting';
+    }
+    if (b.waveState === 'fighting' && !b.enemies.length) {
+      b.waveState = 'cleared';
+      var bonus = CONFIG.ECON.waveBonus(b.wave) + b.farmerIncome;
+      b.P.mantou += bonus;
+      if (!b.solo) b.E.mantou += bonus;
+      if (b.P.hearts < CONFIG.ECON.hearts) b.P.hearts += 1;
+      Game.UI.toast('第 ' + b.wave + ' 波告破 · 犒赏 ' + bonus + ' 馒头');
+      Game.Audio.play('coin');
+      if (b.wave >= b.maxWave) { endBattle(b, true); return; }
+      b.restTimer = CONFIG.INTERMISSION;
     }
   }
 
-  function beginWave(b) {
-    var spec;
-    if (b.mode === 'campaign') {
-      spec = b.waveList[b.waveIdx];
-    } else {
-      b.endlessWave++;
-      spec = DATA.buildEndlessWave(b.endlessWave);
-    }
-    b.phase = 'spawning';
-    b.spawnTotal = 0; b.spawned = 0; b.enemyAlive = 0;
-    b.spawnQueue = [];
-    var at = 0.5, spread = spec.spread || 12;
-    spec.groups.forEach(function (g) {
-      var per = spread / Math.max(1, g.n);
-      for (var i = 0; i < g.n; i++) {
-        b.spawnQueue.push({ at: at + i * per, kind: g.k });
-        b.spawnTotal++;
-      }
-      at += 1.4;
+  function startNextWave(b) {
+    b.wave++;
+    b.waveState = 'spawning';
+    b.spawnQueue = CONFIG.buildWave(b.wave);
+    b.spawnTimer = 0.5;
+    if (b.wave % 5 === 0) Game.Audio.play('boss');
+  }
+
+  function spawn(b, type, side) {
+    var base = DATA.ENEMIES[type];
+    var effWave = b.wave + (b.mode === 'campaign' ? b.stageOffset : 0);
+    var hp = Math.round(base.hp * CONFIG.hpMul(effWave));
+    var pts = side === 'P' ? b.pathPPts : b.pathEPts;
+    b.enemies.push({
+      side: side, type: type, ch: base.ch, boss: !!base.boss,
+      hp: hp, maxHp: hp, spd: base.spd, mantou: base.mantou, size: base.size,
+      seg: 0, segT: 0, x: pts[0][0], y: pts[0][1],
+      slowT: 0, stunT: 0, flashT: 0, dead: false
     });
-    b.bannerText = (b.mode === 'endless' ? '第 ' + b.endlessWave + ' 波' : '第 ' + (b.waveIdx + 1) + ' 波');
   }
 
-  // 只在"整条通路无障碍"的列出生，避免敌人卡在边路死巷导致波次无法清空
-  function randomOpenEnemyCol(b) {
-    var opts = [];
-    for (var c = 0; c < b.cols; c++) {
-      var clear = true;
-      for (var r = 0; r <= b.rows - 2; r++) {
-        if (b.cells[r][c].blocked) { clear = false; break; }
+  /* ================= 敌人推进 ================= */
+  function updateEnemies(b, dt) {
+    for (var i = 0; i < b.enemies.length; i++) {
+      var e = b.enemies[i];
+      if (e.dead) continue;
+      if (e.stunT > 0) { e.stunT -= dt; continue; }
+      var spd = e.spd * (e.slowT > 0 ? 0.5 : 1);
+      if (e.slowT > 0) e.slowT -= dt;
+      var pts = e.side === 'P' ? b.pathPPts : b.pathEPts;
+      var move = spd * dt;
+      while (move > 0 && e.seg < pts.length - 1) {
+        var a = pts[e.seg], bb = pts[e.seg + 1];
+        var segLen = Math.max(1, Math.hypot(bb[0] - a[0], bb[1] - a[1]));
+        var remain = (1 - e.segT) * segLen;
+        if (move < remain) { e.segT += move / segLen; move = 0; }
+        else { move -= remain; e.seg++; e.segT = 0; }
       }
-      if (clear) opts.push(c);
-    }
-    if (!opts.length) return -1;
-    return U.pick(opts);
-  }
-
-  function spawnEnemy(b, spec) {
-    var col = randomOpenEnemyCol(b);
-    b.spawned++;
-    if (col < 0) return;
-    var e = DATA.ENEMIES[spec.kind];
-    var hpMul = 1, atkMul = 1;
-    if (b.mode === 'campaign') {
-      hpMul = Math.pow(1.22, b.stage - 1);
-      atkMul = Math.pow(1.15, b.stage - 1);
-    } else {
-      var w = b.endlessWave;
-      hpMul = Math.min(CONFIG.ENDLESS.hpCapMul, 1 + CONFIG.ENDLESS.hpPerWave * w);
-      atkMul = 1 + CONFIG.ENDLESS.atkPerWave * w;
-    }
-    var stats = enemyStats(spec.kind, hpMul, atkMul, b.waveIdx);
-    var u = makeUnit({ side: 'enemy', kind: spec.kind, stats: stats, col: col, row: 0.35, bounty: e.bounty, isBoss: !!e.isBoss });
-    b.units.push(u);
-    b.enemyAlive++;
-    if (e.isBoss) {
-      Game.Effects.burst(col, 0.35, '#a83b2d', 2.2);
-      Game.Audio.play('skill');
+      var p1 = pts[e.seg], p2 = pts[Math.min(e.seg + 1, pts.length - 1)];
+      e.x = p1[0] + (p2[0] - p1[0]) * e.segT;
+      e.y = p1[1] + (p2[1] - p1[1]) * e.segT;
+      if (e.seg >= pts.length - 1) {
+        e.dead = true;
+        var S = e.side === 'P' ? b.P : b.E;
+        S.hearts--;
+        S.shakeT = 0.5;
+        var adou = pts[pts.length - 1];
+        Game.Effects.burst(adou[0], adou[1], '#a83b2d', 2.2);
+        Game.Effects.text(adou[0], adou[1] - 0.6, '漏怪！-1心', '#a83b2d');
+        Game.Audio.play('adouHit');
+      }
     }
   }
 
-  function waveCleared(b) {
-    var bonus = CONFIG.BUNS_PER_WAVE + b.farmerIncome;
-    b.buns += bonus;
-    var adou = b.adou.player;
-    adou.hp = Math.min(adou.maxHp, adou.hp + CONFIG.ADOU_REGEN_PER_WAVE);
-    Game.Effects.text(b.centerCol, b.rows - 1, '馒头 +' + bonus + ' · 阿斗回血', '#c9a227');
-    Game.Audio.play('coin');
-    b.waveIdx++;
-    if (b.mode === 'campaign' && b.waveIdx >= b.waveList.length) {
-      endBattle(b, true);
-      return;
-    }
-    b.phase = 'intermission';
-    b.intermission = CONFIG.WAVE_INTERMISSION;
-    b.bannerText = null;
+  /* ================= 塔攻击 ================= */
+  function enemiesOf(b, side) {
+    var out = [];
+    for (var i = 0; i < b.enemies.length; i++) if (!b.enemies[i].dead && b.enemies[i].side === side) out.push(b.enemies[i]);
+    return out;
   }
-
-  /* ================= 单位行动 ================= */
-  function updateUnits(b) {
-    var lanes = {};
-    for (var i = 0; i < b.units.length; i++) {
-      var u = b.units[i];
-      if (u.hp <= 0) continue;
-      (lanes[u.col] = lanes[u.col] || []).push(u);
-    }
-    for (var c in lanes) updateLane(b, lanes[c]);
-  }
-
-  function updateLane(b, list) {
-    var player = [], enemy = [];
+  function mostAdvanced(list, x, y, range) {
+    var best = null, bs = -1;
     for (var i = 0; i < list.length; i++) {
-      (list[i].side === 'player' ? player : enemy).push(list[i]);
+      var e = list[i];
+      var d = Math.hypot(e.x - x, e.y - y);
+      if (d > range) continue;
+      var prog = e.seg + e.segT;
+      if (prog > bs) { bs = prog; best = e; }
     }
-    player.sort(function (a, b2) { return a.row - b2.row; });
-    enemy.sort(function (a, b2) { return b2.row - a.row; });
-    for (var p = 0; p < player.length; p++) actUnit(b, player[p], 'player', player, enemy);
-    for (var q = 0; q < enemy.length; q++) actUnit(b, enemy[q], 'enemy', enemy, player);
+    return best;
   }
-
-  function actUnit(b, u, side, friends, foes) {
-    if (u.stunUntil > b.time) return;
-    // 英雄技能
-    if (u.isHero && u.skill && u.skillInterval) {
-      u.skillCd -= STEP;
-      if (u.skillCd <= 0) {
-        u.skillCd = u.skillInterval;
-        castSkill(b, u);
-      }
-    }
-    var frontFriend = friends[0];
-    var frontFoe = foes[0];
-    var target = null;
-    var speedMul = u.atkSpeedBuffUntil > b.time ? 1.5 : 1;
-    if (u.ranged) {
-      var best = null, bestDist = Infinity;
-      for (var i = 0; i < foes.length; i++) {
-        var f = foes[i];
-        var dist = side === 'player' ? (u.row - f.row) : (f.row - u.row);
-        if (dist > 0 && dist <= u.atkRange && dist < bestDist) { best = f; bestDist = dist; }
-      }
-      target = best;
-    } else if (frontFriend === u && frontFoe) {
-      var d2 = side === 'player' ? (u.row - frontFoe.row) : (frontFoe.row - u.row);
-      if (d2 >= 0 && d2 <= u.atkRange) target = frontFoe;
-    }
-    if (target) {
-      u.atkCd -= STEP * speedMul;
-      if (u.atkCd <= 0) {
-        u.atkCd = 1 / u.atkSpeed;
-        performAttack(b, u, target, side);
-      }
-    } else if (u.assault) {
-      u.atkCd -= STEP * speedMul;
-      if (u.atkCd <= 0) {
-        u.atkCd = 1 / u.atkSpeed;
-        assaultAdou(b, u, side === 'player' ? 'enemy' : 'player');
-      }
-    } else {
-      marchUnit(b, u, side);
-    }
+  function damage(b, e, dmg, opt) {
+    if (e.dead) return;
+    opt = opt || {};
+    e.hp -= dmg;
+    e.flashT = 0.1;
+    if (opt.stun) e.stunT = Math.max(e.stunT, opt.stun);
+    if (opt.slow) e.slowT = Math.max(e.slowT, opt.slow);
+    Game.Effects.hit(e.x, e.y);
+    if (e.hp <= 0) kill(b, e);
   }
-
-  function marchUnit(b, u, side) {
-    var dir = side === 'player' ? -1 : 1;
-    if (side === 'player' && u.row <= 1.0) {
-      u.row = 1.0;
-      u.assault = (b.mode === 'arena'); // 竞技才冲击敌方阿斗；主线/无尽在上方前线驻守
-      return;
-    }
-    if (side === 'enemy' && u.row >= b.rows - 2.0) {
-      u.row = b.rows - 2.0;
-      if (b.mode === 'arena') u.assault = true;   // 竞技：持续冲击
-      else hitAdouOnce(b, 'player', u);            // 主线/无尽：漏怪一次伤后消失
-      return;
-    }
-    var nextR = Math.round(u.row + dir * 0.6);
-    if (cellBlocked(b, u.col, nextR)) return;
-    if (friendlyAt(b, u, side, u.col, nextR)) return;
-    u.row += dir * u.moveSpeed * STEP;
-  }
-
-  function cellBlocked(b, col, row) {
-    if (row < 0 || row >= b.rows || col < 0 || col >= b.cols) return true;
-    return b.cells[row][col].blocked;
-  }
-
-  function friendlyAt(b, u, side, col, row) {
-    for (var i = 0; i < b.units.length; i++) {
-      var o = b.units[i];
-      if (o.hp <= 0 || o.side !== side || o.id === u.id) continue;
-      if (o.col === col && Math.round(o.row) === row) return true;
-    }
-    return false;
-  }
-
-  function performAttack(b, u, target, side) {
-    var dmg = u.atk, crit = false;
-    if (u.crit && Math.random() < u.crit) { dmg = Math.round(dmg * 2); crit = true; }
-    if (u.ranged) {
-      if (b.projectiles.length >= CONFIG.MAX_PROJECTILES) return;
-      b.projectiles.push({
-        id: newId(), side: side, col: u.col, row: u.row, targetId: target.id,
-        targetRow: target.row, speed: CONFIG.PROJECTILE_SPEED, dmg: dmg,
-        pierce: u.pierce || 1, crit: crit, heroSkill: false
-      });
-    } else {
-      damageUnit(b, target, dmg, u, crit);
-      if (target.hp > 0 && u.knockback) {
-        // 击退位移钳制在棋盘内，避免把单位打出地图外造成死局
-        target.row = U.clamp(target.row + (u.side === 'player' ? -1 : 1) * u.knockback, 0.05, b.rows - 1.05);
-      }
-    }
-  }
-
-  function damageUnit(b, target, dmg, src, crit) {
-    if (target.hp <= 0) return;
-    if (target.invincibleUntil > b.time) {
-      Game.Effects.text(target.col, target.row, '免疫', '#8a7d66');
-      return;
-    }
-    var shown = dmg;
-    if (target.shield > 0) {
-      var absorbed = Math.min(target.shield, dmg);
-      target.shield -= absorbed;
-      dmg -= absorbed;
-    }
-    target.hp -= dmg;
-    if (target.hp <= 0) {
-      target.hp = 0;
-      Game.Effects.text(target.col, target.row, (crit ? '暴击' : '') + Math.max(0, Math.round(shown)), crit ? '#c9a227' : '#a83b2d');
-      Game.Effects.hit(target.col, target.row);
-      killUnit(b, target, src);
-    } else {
-      Game.Effects.text(target.col, target.row, Math.max(0, Math.round(dmg)), crit ? '#c9a227' : '#a83b2d');
-      Game.Effects.hit(target.col, target.row);
-      Game.Audio.play('hit');
-      if (src && src.lifesteal > 0 && src.hp > 0 && src.side === 'player') {
-        src.hp = Math.min(src.maxHp, src.hp + Math.round(dmg * src.lifesteal));
-      }
-    }
-  }
-
-  function killUnit(b, u, src) {
-    u.dead = true;
-    Game.Effects.kill(u.col, u.row, !!u.isBoss);
+  function kill(b, e) {
+    e.dead = true;
+    var S = e.side === 'P' ? b.P : b.E;
+    S.mantou += e.mantou;
+    Game.Effects.kill(e.x, e.y, !!e.boss);
+    Game.Effects.text(e.x, e.y - 0.5, '+' + e.mantou, '#c9a227');
+    if (e.boss && e.side === 'P') Game.State.rollWeaponDrop(b);
     Game.Audio.play('kill');
-    if (u.side === 'enemy') b.enemyAlive = Math.max(0, b.enemyAlive - 1);
-    if (src) {
-      src.kills++;
-      if (src.isHero && src.heroDef && src.level < CONFIG.MAX_LEVEL) {
-        if (src.kills >= CONFIG.HERO_KILLS_FOR_LEVEL(src.level)) {
-          src.level++;
-          var st = heroStats(src.heroKey, src.level, src.weapon, b.dailyBuff);
-          src.hp = src.maxHp = st.hp;
-          src.atk = st.atk; src.atkRange = st.atkRange; src.atkSpeed = st.atkSpeed;
-          src.pierce = st.pierce; src.crit = st.crit; src.lifesteal = st.lifesteal;
-          src.skillInterval = st.skillInterval;
-          Game.Effects.text(src.col, src.row, '升 ' + src.level + ' 级', '#c9a227');
-          Game.Audio.play('merge');
+  }
+
+  function updateSide(b, side, dt) {
+    var S = side === 'P' ? b.P : b.E;
+    var enemies = enemiesOf(b, side);
+    var aura = auraOf(b, side);
+    for (var k in S.units) {
+      var u = S.units[k];
+      var st = unitStats(u, side, b);
+      if (st.inert) continue;
+      if (u.attackT > 0) u.attackT -= dt;
+      u.cd -= dt;
+      if (u.cd > 0) continue;
+      if (!enemies.length) { u.cd = 0.08; continue; }
+      var cr = k.split('_');
+      var px = +cr[0] + 0.5, py = +cr[1] + 0.5;
+      var range = st.range;
+      var dmg = Math.round(st.dmg * aura);
+      var atkSpeedBuff = b._atkSpeedBuff && b.time < b._atkSpeedBuff;
+
+      // 技能分支
+      if (st.skill === 'stun') {
+        var hitAny = false;
+        for (var i = 0; i < enemies.length; i++) {
+          if (Math.hypot(enemies[i].x - px, enemies[i].y - py) <= range) { damage(b, enemies[i], dmg, { stun: 1.0 }); hitAny = true; }
         }
+        if (hitAny) { u.cd = st.itv; u.attackT = 0.35; Game.Effects.burst(px, py, '#a83b2d', 2); }
+        else u.cd = 0.08;
+        continue;
       }
-      if (src.side === 'player' && u.bounty > 0) {
-        b.buns += u.bounty;
-        Game.Effects.text(u.col, u.row, '馒头 +' + u.bounty, '#c9a227');
+      if (st.skill === 'pierce') {
+        var t0 = mostAdvanced(enemies, px, py, range);
+        if (!t0) { u.cd = 0.08; continue; }
+        u.cd = st.itv; u.attackT = 0.35;
+        var ang = Math.atan2(t0.y - py, t0.x - px);
+        Game.Effects.slash(px, py, '#1a1a1a');
+        for (var j = 0; j < enemies.length; j++) {
+          var e2 = enemies[j];
+          var d2 = Math.hypot(e2.x - px, e2.y - py);
+          if (d2 > range) continue;
+          var a2 = Math.atan2(e2.y - py, e2.x - px);
+          var diff = Math.abs(((a2 - ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+          if (diff < 0.45) damage(b, e2, dmg);
+        }
+        continue;
       }
-      if (b.mode === 'arena' && src.side === 'enemy' && b.ai && u.bounty > 0) {
-        b.ai.buns += u.bounty;
+      if (st.skill === 'volley' || st.skill === 'sweep') {
+        var hitAny2 = false;
+        for (var k2 = 0; k2 < enemies.length; k2++) {
+          if (Math.hypot(enemies[k2].x - px, enemies[k2].y - py) <= range) { damage(b, enemies[k2], dmg); hitAny2 = true; }
+        }
+        if (hitAny2) { u.cd = st.itv; u.attackT = 0.35; Game.Effects.burst(px, py, '#c9a227', 2.2); }
+        else u.cd = 0.08;
+        continue;
       }
-    }
-  }
+      if (st.skill === 'smash' || st.skill === 'fortify') {
+        var t1 = mostAdvanced(enemies, px, py, range);
+        if (!t1) { u.cd = 0.08; continue; }
+        u.cd = st.itv; u.attackT = 0.35;
+        damage(b, t1, Math.round(dmg * 1.6));
+        Game.Effects.burst(t1.x, t1.y, '#a83b2d', 1.6);
+        continue;
+      }
 
-  // 主线/无尽：漏怪到阿斗一次伤，随即移除
-  function hitAdouOnce(b, who, u) {
-    var adou = b.adou[who];
-    adou.hp = Math.max(0, adou.hp - u.atk);
-    var r = who === 'player' ? b.rows - 1 : 0;
-    Game.Effects.burst(u.col, r, '#a83b2d', 1.8);
-    Game.Effects.text(u.col, r, '阿斗 -' + u.atk, '#a83b2d');
-    Game.Audio.play('adouHit');
-    u.dead = true;
-    if (u.side === 'enemy') b.enemyAlive = Math.max(0, b.enemyAlive - 1);
-    checkEnd(b);
-  }
-
-  // 单位抵达阿斗后的持续冲击（可被防御方击杀打断）
-  function assaultAdou(b, u, who) {
-    var adou = b.adou[who];
-    var dmg = u.atk;
-    if (u.crit && Math.random() < u.crit) dmg = Math.round(dmg * 2);
-    adou.hp = Math.max(0, adou.hp - dmg);
-    var r = who === 'player' ? b.rows - 1 : 0;
-    Game.Effects.burst(u.col, r, '#a83b2d', 1.4);
-    Game.Effects.text(u.col, r, '阿斗 -' + dmg, '#a83b2d');
-    Game.Audio.play('adouHit');
-    checkEnd(b);
-  }
-
-  /* ================= 英雄技能 ================= */
-  function enemiesAhead(b, u, range) {
-    var out = [];
-    for (var i = 0; i < b.units.length; i++) {
-      var o = b.units[i];
-      if (o.hp <= 0 || o.side === u.side || o.col !== u.col) continue;
-      var dist = u.side === 'player' ? (u.row - o.row) : (o.row - u.row);
-      if (dist >= 0 && dist <= range) out.push(o);
-    }
-    return out;
-  }
-  function enemiesAround(b, u, range) {
-    var out = [];
-    for (var i = 0; i < b.units.length; i++) {
-      var o = b.units[i];
-      if (o.hp <= 0 || o.side === u.side) continue;
-      if (Math.abs(o.col - u.col) > 1) continue;
-      var dist = u.side === 'player' ? (u.row - o.row) : (o.row - u.row);
-      if (dist >= 0 && dist <= range) out.push(o);
-    }
-    return out;
-  }
-  function pushProjectile(b, p) {
-    if (b.projectiles.length >= CONFIG.MAX_PROJECTILES) return;
-    b.projectiles.push(p);
-  }
-  function castSkill(b, u) {
-    var atk = u.atk;
-    Game.Audio.play('skill');
-    Game.Effects.burst(u.col, u.row, '#1a1a1a', 1.6);
-    switch (u.skill) {
-      case 'lance':
-        pushProjectile(b, { id: newId(), side: u.side, col: u.col, row: u.row, targetId: null, targetRow: u.side === 'player' ? 0 : b.rows - 1, speed: CONFIG.PROJECTILE_SPEED * 1.4, dmg: Math.round(atk * 3), pierce: 4, crit: false, heroSkill: 'lance' });
-        Game.Effects.slash(u.col, u.row, '#1a1a1a');
-        break;
-      case 'sweep': {
-        var foes = enemiesAhead(b, u, 2);
-        foes.forEach(function (f) {
-          damageUnit(b, f, Math.round(atk * 2), u, false);
-          if (f.hp > 0) f.row += (u.side === 'player' ? -1 : 1) * 0.5;
+      // 普通攻击（含 snipe 超远速射）
+      var target = mostAdvanced(enemies, px, py, range);
+      if (!target) { u.cd = 0.08; continue; }
+      u.cd = (atkSpeedBuff ? st.itv * 0.6 : st.itv);
+      u.attackT = 0.35;
+      var snipe = st.skill === 'snipe';
+      if (b.bullets.length < CONFIG.MAX_BULLETS) {
+        b.bullets.push({
+          x: px, y: py, target: target,
+          spd: (snipe ? 16 : 11), dmg: dmg,
+          arrow: (u.kind === 's' && u.ch === '弓') || snipe,
+          gold: u.kind === 'g', ang: 0
         });
-        Game.Effects.slash(u.col, u.row, '#a83b2d');
-        break;
       }
-      case 'roar': {
-        enemiesAround(b, u, 2).forEach(function (f) {
-          damageUnit(b, f, Math.round(atk * 2.5), u, false);
-          if (f.hp > 0) { f.stunUntil = b.time + 1.5; Game.Effects.stun(f.col, f.row); }
-        });
-        Game.Effects.burst(u.col, u.row, '#a83b2d', 2.6);
-        break;
-      }
-      case 'charge': {
-        enemiesAhead(b, u, 4).forEach(function (f) { damageUnit(b, f, Math.round(atk * 4), u, false); });
-        u.row += (u.side === 'player' ? -1 : 1) * 1.5;
-        Game.Effects.slash(u.col, u.row, '#1a1a1a');
-        break;
-      }
-      case 'volley': {
-        b.units.forEach(function (o) {
-          if (o.hp > 0 && o.side !== u.side) damageUnit(b, o, Math.round(atk * 1.5), u, false);
-        });
-        Game.Effects.screenWash('#a83b2d', 0.24);
-        break;
-      }
-      case 'cleave': {
-        b.units.forEach(function (o) {
-          if (o.hp > 0 && o.side !== u.side) damageUnit(b, o, Math.round(atk * 1.8), u, false);
-        });
-        Game.Effects.screenWash('#1a1a1a', 0.3);
-        break;
-      }
-      case 'heal': {
-        var healSide = u.side;
-        b.units.forEach(function (o) {
-          if (o.hp > 0 && o.side === healSide) o.hp = Math.min(o.maxHp, o.hp + Math.round(o.maxHp * 0.25));
-        });
-        var key = healSide === 'player' ? 'player' : 'enemy';
-        b.adou[key].hp = Math.min(b.adou[key].maxHp, b.adou[key].hp + Math.round(b.adou[key].maxHp * 0.15));
-        Game.Effects.screenWash('#3f9d4f', 0.18);
-        break;
-      }
-      case 'bounce':
-        pushProjectile(b, { id: newId(), side: u.side, col: u.col, row: u.row, targetId: null, targetRow: u.side === 'player' ? 0 : b.rows - 1, speed: CONFIG.PROJECTILE_SPEED * 1.3, dmg: Math.round(atk * 1.6), pierce: 2, crit: false, heroSkill: 'bounce' });
-        break;
-      case 'shield':
-        u.shield = Math.round(u.maxHp * 0.5);
-        u.hp = Math.min(u.maxHp, u.hp + Math.round(u.maxHp * 0.3));
-        Game.Effects.burst(u.col, u.row, '#3b4a6b', 2.2);
-        break;
     }
   }
 
   /* ================= 弹道 ================= */
-  function updateProjectiles(b) {
-    for (var i = b.projectiles.length - 1; i >= 0; i--) {
-      var p = b.projectiles[i];
-      var dir = p.side === 'player' ? -1 : 1;
-      p.row += dir * p.speed * STEP;
-      var hit = false;
-      if (p.targetId) {
-        var t = findById(b, p.targetId);
-        if (t && t.hp > 0 && t.col === p.col && Math.abs(t.row - p.row) <= 0.45) {
-          damageUnit(b, t, p.dmg, null, p.crit);
-          p.pierce--;
-          if (p.pierce <= 0) hit = true;
-        }
-      }
-      if (!hit && p.pierce > 0) {
-        var closest = null, bestD = 0.45;
-        for (var j = 0; j < b.units.length; j++) {
-          var o = b.units[j];
-          if (o.hp <= 0 || o.side === p.side || o.col !== p.col) continue;
-          // 只命中前进方向上的敌人
-          if (dir < 0 && o.row > p.row) continue;
-          if (dir > 0 && o.row < p.row) continue;
-          var d = Math.abs(o.row - p.row);
-          if (d <= bestD) { closest = o; bestD = d; }
-        }
-        if (closest) {
-          damageUnit(b, closest, p.dmg, null, p.crit);
-          p.pierce--;
-          if (p.pierce <= 0) hit = true;
-        }
-      }
-      if (hit || p.row < 0 || p.row > b.rows - 1) {
-        b.projectiles.splice(i, 1);
+  function updateBullets(b, dt) {
+    for (var i = b.bullets.length - 1; i >= 0; i--) {
+      var bl = b.bullets[i];
+      if (bl.target.dead) { b.bullets.splice(i, 1); continue; }
+      var dx = bl.target.x - bl.x, dy = bl.target.y - bl.y;
+      var d = Math.hypot(dx, dy);
+      var step = bl.spd * dt;
+      if (d <= step) {
+        damage(b, bl.target, bl.dmg);
+        Game.Effects.hit(bl.target.x, bl.target.y);
+        b.bullets.splice(i, 1);
+      } else {
+        bl.ang = Math.atan2(dy, dx);
+        bl.x += dx / d * step;
+        bl.y += dy / d * step;
       }
     }
   }
-  function findById(b, id) {
-    for (var i = 0; i < b.units.length; i++) if (b.units[i].id === id) return b.units[i];
-    return null;
-  }
 
   function cleanup(b) {
-    b.units = b.units.filter(function (u) { return !u.dead && u.hp > 0; });
+    b.enemies = b.enemies.filter(function (e) { return !e.dead; });
   }
 
   /* ================= 胜负 ================= */
   function checkEnd(b) {
     if (b.result) return;
-    if (b.adou.player.hp <= 0) endBattle(b, false);
-    else if (b.adou.enemy.hp <= 0) endBattle(b, true);
+    if (b.solo) {
+      if (b.P.hearts <= 0) return endBattle(b, false);
+      return;
+    }
+    if (b.P.hearts <= 0) return endBattle(b, false);
+    if (b.E.hearts <= 0) return endBattle(b, true);
   }
   function endBattle(b, win) {
     if (b.result) return;
@@ -596,75 +548,25 @@ Game.Battle = (function () {
     Game.State.onBattleEnd(b);
   }
 
-  /* ================= 玩家动作支撑 ================= */
-  function canPlace(b, col, row) {
-    if (col < 0 || col >= b.cols || row < 0 || row >= b.rows) return false;
-    if (row < b.playerZoneMin || row > b.rows - 1) return false;
-    if (row === b.rows - 1 && col === b.centerCol) return false;
-    if (b.cells[row][col].blocked) return false;
-    for (var i = 0; i < b.units.length; i++) {
-      var u = b.units[i];
-      if (u.hp > 0 && u.col === col && Math.round(u.row) === row) return false;
-    }
-    return true;
-  }
-
-  function createPlayerUnit(b, tile, col, row) {
-    var stats, heroKey = null, weapon = null, rarity, level, kind;
-    if (tile.type === 'hero') {
-      heroKey = tile.heroKey;
-      var mw = b.weapons[heroKey];
-      weapon = mw ? { tier: mw.tier, name: mw.name } : null;
-      stats = heroStats(heroKey, 1, weapon, b.dailyBuff);
-      rarity = DATA.HEROES[heroKey].rarity;
-      level = 1;
-      kind = DATA.HEROES[heroKey].weapon;
-    } else {
-      stats = soldierStats(tile.kind, tile.level, tile.rarity, b.dailyBuff);
-      rarity = tile.rarity; level = tile.level;
-      kind = tile.kind;
-    }
-    var u = makeUnit({
-      side: 'player', kind: kind, stats: stats, col: col, row: row,
-      level: level, rarity: rarity, heroKey: heroKey, weapon: weapon,
-      bounty: tile.type === 'hero' ? 4 : 2
-    });
-    if (tile.type === 'hero') Game.Effects.heroSummon(col, row);
-    return u;
-  }
-
-  function createEnemyUnit(b, kind, stats, col, row, level, rarity, bounty) {
-    var e = DATA.ENEMIES[kind] || {};
-    return makeUnit({
-      side: 'enemy', kind: kind, stats: stats, col: col, row: row,
-      level: level || 1, rarity: rarity || 1,
-      bounty: bounty !== undefined ? bounty : (e.bounty || 2),
-      isBoss: !!e.isBoss
-    });
-  }
-
-  /* 主动道具：神兵符 目标选择 */
-  function findUnitAtPixel(b, pxX, pxY, L) {
-    var col = Math.floor(pxX / L.cellW);
-    var row = pxY / L.cellH;
-    for (var i = 0; i < b.units.length; i++) {
-      var u = b.units[i];
-      if (u.hp <= 0) continue;
-      if (u.col === col && Math.abs(u.row - row) <= 0.7) return u;
-    }
-    return null;
-  }
-
+  /* ================= 暴露 ================= */
   return {
     setup: setup,
     update: update,
-    canPlace: canPlace,
-    createPlayerUnit: createPlayerUnit,
-    createEnemyUnit: createEnemyUnit,
-    findUnitAtPixel: findUnitAtPixel,
-    newId: newId,
-    enemyStats: enemyStats,
-    soldierStats: soldierStats,
-    heroStats: heroStats
+    unitStats: unitStats,
+    recruitCost: recruitCost,
+    doRecruit: doRecruit,
+    rollCard: rollCard,
+    autoMergeBench: autoMergeBench,
+    canPlaceUnit: canPlaceUnit,
+    canUnlock: canUnlock,
+    placeCard: placeCard,
+    unlockCell: unlockCell,
+    availableHeroes: availableHeroes,
+    combineHero: combineHero,
+    addActiveItem: addActiveItem,
+    consumeItem: consumeItem,
+    useActiveItem: useActiveItem,
+    heroByName: heroByName,
+    key: key
   };
 })();

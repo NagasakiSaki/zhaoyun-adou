@@ -1,141 +1,92 @@
-/* ai.js —— 竞技模式规则型对手（复用敌方单位创建） */
+/* ai.js —— 竞技模式对手：规则型运营，防守己方半区 */
 Game.AI = (function () {
   var CONFIG = window.CONFIG, DATA = window.DATA, U = window.Game.Utils;
+  var thinkT = 2.0;
 
-  function init(b) {
-    var ai = {
-      buns: CONFIG.ARENA.aiBunsStart,
-      bench: new Array(CONFIG.BENCH_SIZE).fill(null),
-      recruitCd: 1.5,
-      recruitCount: 0,
-      unlockTimer: CONFIG.ARENA.aiUnlockEvery,
-      placeTimer: 0.6,
-      passiveBase: CONFIG.ARENA.aiPassiveIncome
-    };
-    // 初始兵力：避免开局被 rush
-    var kinds = ['jian', 'gong'];
-    var used = {};
-    var n = CONFIG.ARENA.aiStarterCount || 2;
-    for (var i = 0; i < n && i < kinds.length; i++) {
-      var col = pickStartCol(b, used);
-      if (col < 0) break;
-      var row = kinds[i] === 'gong' ? Math.max(0, Math.floor(b.enemyZoneMax / 2)) : b.enemyZoneMax;
-      var stats = aiUnitStats(b, kinds[i], 1, 1);
-      var u = Game.Battle.createEnemyUnit(b, kinds[i], stats, col, row, 1, 1);
-      b.units.push(u);
-      used[col] = true;
-    }
-    return ai;
-  }
-  function pickStartCol(b, used) {
-    var opts = [];
-    for (var c = 0; c < b.cols; c++) {
-      if (used[c]) continue;
-      var clear = true;
-      for (var r = 0; r <= b.rows - 2; r++) if (b.cells[r][c].blocked) { clear = false; break; }
-      if (!clear) continue;
-      opts.push(c);
-    }
-    if (!opts.length) return -1;
-    return U.pick(opts);
-  }
+  function init() { thinkT = 2.0; }
 
   function update(b, dt) {
-    var ai = b.ai;
-    if (!ai) return;
-    var income = ai.passiveBase + b.time * CONFIG.ARENA.aiPassiveIncomePerMin / 60;
-    ai.buns += income * dt;
-
-    ai.recruitCd -= dt;
-    if (ai.recruitCd <= 0) {
-      var cost = CONFIG.RECRUIT_COST(ai.recruitCount);
-      ai.recruitCd = Math.max(CONFIG.ARENA.aiRecruitCdMin, CONFIG.ARENA.aiRecruitCdStart - b.time * CONFIG.ARENA.aiRecruitCdDecayPerMin / 60);
-      if (ai.buns >= cost && ai.bench.indexOf(null) >= 0) {
-        ai.buns -= cost;
-        ai.recruitCount++;
-        aiRecruit(b, ai);
-      }
-    }
-
-    ai.unlockTimer -= dt;
-    if (ai.unlockTimer <= 0) {
-      ai.unlockTimer = CONFIG.ARENA.aiUnlockEvery;
-      if (b.enemyZoneMax < Math.floor(b.rows / 2) - 1) b.enemyZoneMax++;
-    }
-
-    ai.placeTimer -= dt;
-    if (ai.placeTimer <= 0) {
-      ai.placeTimer = 1.1;
-      aiPlace(b, ai);
-    }
+    if (b.solo || b.result || b.paused) return;
+    thinkT -= dt;
+    if (thinkT > 0) return;
+    thinkT = CONFIG.ARENA.thinkItv;
+    if (Math.random() < CONFIG.ARENA.missRate) return;
+    step(b, b.E, 'E');
   }
 
-  function aiRecruit(b, ai) {
-    var tile = { type: 'soldier', kind: U.weightedPick(CONFIG.SOLDIER_DROP), level: 1, rarity: 1 };
-    var idx = ai.bench.indexOf(null);
-    if (idx < 0) return;
-    ai.bench[idx] = tile;
-    aiAutoMerge(ai);
-  }
+  function key(c, r) { return c + '_' + r; }
 
-  function aiAutoMerge(ai) {
-    for (var i = 0; i < ai.bench.length; i++) {
-      var t = ai.bench[i];
-      if (!t || t.type !== 'soldier') continue;
-      for (var j = i + 1; j < ai.bench.length; j++) {
-        var t2 = ai.bench[j];
-        if (t2 && t2.type === 'soldier' && t2.kind === t.kind && t2.level === t.level && t.level < CONFIG.MAX_LEVEL) {
-          t.level++;
-          t.rarity = CONFIG.LEVEL_RARITY[t.level];
-          ai.bench[j] = null;
-          return aiAutoMerge(ai);
+  function step(b, S, side) {
+    // 1. 手牌内士兵合成
+    for (var i = 0; i < S.bench.length; i++) {
+      var a = S.bench[i];
+      if (!a || a.kind !== 's') continue;
+      for (var j = i + 1; j < S.bench.length; j++) {
+        var c = S.bench[j];
+        if (c && c.kind === 's' && c.ch === a.ch && c.lv === a.lv && a.lv < CONFIG.MAX_LV) {
+          a.lv++; S.bench[j] = null;
+          return true;
         }
       }
     }
-  }
-
-  function aiUnitStats(b, kind, level, rarity) {
-    var s = Game.Battle.soldierStats(kind, level, rarity, null);
-    if (b.aiStatMul && b.aiStatMul !== 1) {
-      s.hp = Math.round(s.hp * b.aiStatMul);
-      s.atk = Math.round(s.atk * b.aiStatMul);
-    }
-    return s;
-  }
-
-  function aiPlace(b, ai) {
-    for (var i = 0; i < ai.bench.length; i++) {
-      var t = ai.bench[i];
-      if (!t || t.type !== 'soldier') continue;
-      var preferFront = t.kind === 'qiang' || t.kind === 'jian' || t.kind === 'qi';
-      var row = preferFront ? b.enemyZoneMax : Math.max(0, Math.floor(b.enemyZoneMax / 2));
-      var placed = false;
-      var order = shuffleCols(b);
-      for (var c = 0; c < order.length; c++) {
-        var col = order[c];
-        if (b.cells[row][col].blocked) continue;
-        if (row === 0 && col === b.centerCol) continue;
-        var occupied = false;
-        for (var k = 0; k < b.units.length; k++) {
-          var u = b.units[k];
-          if (u.hp > 0 && u.col === col && Math.round(u.row) === row) { occupied = true; break; }
+    // 2. 铲子：解锁一块空地（概率）
+    for (var s2 = 0; s2 < S.bench.length; s2++) {
+      if (S.bench[s2] && S.bench[s2].kind === 'shovel') {
+        if (Math.random() < 0.5) {
+          var opts = [];
+          for (var c2 = 0; c2 < b.cols; c2++) for (var r2 = 0; r2 < Math.floor(b.rows / 2); r2++) {
+            if (b.cellType[key(c2, r2)] === 'block') opts.push([c2, r2]);
+          }
+          if (opts.length) {
+            var p = U.pick(opts);
+            b.cellType[key(p[0], p[1])] = 'build_e';
+            b.buildE.push(p);
+            S.bench[s2] = null;
+            return true;
+          }
         }
-        if (occupied) continue;
-        var stats = aiUnitStats(b, t.kind, t.level, t.rarity);
-        var unit = Game.Battle.createEnemyUnit(b, t.kind, stats, col, row, t.level, t.rarity);
-        b.units.push(unit);
-        ai.bench[i] = null;
-        placed = true;
-        break;
+        S.bench[s2] = null;
+        return true;
       }
-      if (placed) { ai.bench[i] = null; }
     }
-  }
-
-  function shuffleCols(b) {
-    var arr = [];
-    for (var c = 0; c < b.cols; c++) arr.push(c);
-    return U.shuffle(arr);
+    // 3. 士兵/武将上阵到空地（近战贴路优先已由 build_e 布局保证）
+    var cells = b.buildE;
+    for (var i3 = 0; i3 < S.bench.length; i3++) {
+      var u = S.bench[i3];
+      if (!u || u.kind === 'f') continue;
+      for (var k = 0; k < cells.length; k++) {
+        var ck = key(cells[k][0], cells[k][1]);
+        if (!S.units[ck]) {
+          S.units[ck] = u;
+          S.bench[i3] = null;
+          return true;
+        }
+      }
+    }
+    // 4. 手牌士兵合到阵地
+    for (var i4 = 0; i4 < S.bench.length; i4++) {
+      var u2 = S.bench[i4];
+      if (!u2 || u2.kind !== 's') continue;
+      for (var k2 = 0; k2 < cells.length; k2++) {
+        var ck2 = key(cells[k2][0], cells[k2][1]);
+        var t = S.units[ck2];
+        if (t && t.kind === 's' && t.ch === u2.ch && t.lv === u2.lv && t.lv < CONFIG.MAX_LV) {
+          t.lv++; S.bench[i4] = null;
+          return true;
+        }
+      }
+    }
+    // 5. 征兵（席上无可上阵士兵且馒头够）
+    var hasPlayable = false;
+    for (var bi = 0; bi < S.bench.length; bi++) {
+      var bu = S.bench[bi];
+      if (bu && (bu.kind === 's' || bu.kind === 'g')) { hasPlayable = true; break; }
+    }
+    if (!hasPlayable && S.mantou >= Game.Battle.recruitCost(S)) {
+      Game.Battle.doRecruit(b, S, false);
+      return true;
+    }
+    return false;
   }
 
   return { init: init, update: update };
