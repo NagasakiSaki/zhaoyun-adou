@@ -1,0 +1,220 @@
+/* battle.css —— 战场 HUD、阿斗血条、底部操作区 */
+#screen-battle{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+}
+#battle-top{
+  flex:none;
+  padding:calc(6px + env(safe-area-inset-top)) 10px 6px;
+  background:rgba(26,26,26,.96);
+  color:var(--paper);
+  z-index:5;
+}
+.bt-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.bt-adou{
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:14px;
+  min-width:0;
+}
+.bt-adou .lbl{ flex:none; }
+.bt-adou .bar{
+  flex:1;
+  height:12px;
+  background:rgba(255,255,255,.14);
+  border-radius:6px;
+  overflow:hidden;
+  position:relative;
+}
+.bt-adou .bar .fill{
+  height:100%;
+  border-radius:6px;
+  transition:width .25s;
+}
+.bt-adou.player .fill{ background:var(--blue); }
+.bt-adou.enemy .fill{ background:var(--cinnabar); }
+.bt-adou .num{ flex:none; font-size:12px; color:rgba(255,255,255,.75); width:40px; text-align:right; }
+.bt-wave{
+  flex:none;
+  background:rgba(255,255,255,.12);
+  border-radius:6px;
+  padding:4px 10px;
+  font-size:14px;
+  text-align:center;
+  min-width:110px;
+}
+.bt-tool{
+  flex:none;
+  width:34px; height:34px;
+  border-radius:8px;
+  background:rgba(255,255,255,.12);
+  color:var(--paper);
+  display:flex; align-items:center; justify-content:center;
+  font-size:16px;
+}
+.bt-res{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:6px;
+  font-size:14px;
+}
+.bt-res .res-item{ display:flex; align-items:center; gap:4px; }
+.bt-res .res-item b{ color:var(--gold); }
+.bt-res .spacer{ flex:1; }
+.bt-res .hint{ font-size:12px; color:rgba(255,255,255,.55); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+#battle-stage{
+  flex:1;
+  position:relative;
+  min-height:0;
+  background:var(--paper);
+}
+#battle-canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  touch-action:none;
+  display:block;
+}
+
+/* 波次横幅（canvas 之外用 DOM 覆盖） */
+.wave-banner{
+  position:absolute;
+  top:14%;
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(26,26,26,.9);
+  color:var(--paper);
+  padding:10px 26px;
+  border-radius:10px;
+  font-size:24px;
+  letter-spacing:6px;
+  pointer-events:none;
+  animation:bannerIn .5s ease forwards, bannerOut .5s ease 1.6s forwards;
+  z-index:6;
+}
+@keyframes bannerIn{ from{opacity:0; transform:translateX(-50%) translateY(-14px);} to{opacity:1; transform:translateX(-50%);} }
+@keyframes bannerOut{ from{opacity:1;} to{opacity:0;} }
+
+/* 战场点击提示（放置高亮辅助） */
+.stage-hint{
+  position:absolute;
+  left:50%; bottom:8px;
+  transform:translateX(-50%);
+  background:rgba(26,26,26,.82);
+  color:var(--paper);
+  padding:6px 14px;
+  border-radius:20px;
+  font-size:13px;
+  letter-spacing:1px;
+  z-index:6;
+  pointer-events:none;
+  white-space:nowrap;
+}
+
+#battle-bottom{
+  flex:none;
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  background:rgba(26,26,26,.96);
+  color:var(--paper);
+  z-index:5;
+}
+.bb-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.bench-wrap{
+  display:flex;
+  gap:6px;
+  flex:1;
+  justify-content:center;
+}
+.bench-slot{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.22);
+  width:58px; height:64px;
+  border-radius:8px;
+}
+.bench-slot .slot-rarity{ position:absolute; top:2px; left:3px; }
+.bench-slot .slot-lv{ color:rgba(255,255,255,.7); }
+.bench-slot .slot-kind{ color:rgba(255,255,255,.5); }
+
+.bb-col{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  flex:none;
+}
+.bb-btn{
+  background:var(--cinnabar);
+  color:var(--paper);
+  border-radius:8px;
+  padding:8px 10px;
+  font-size:14px;
+  text-align:center;
+  min-width:88px;
+  letter-spacing:1px;
+}
+.bb-btn:disabled{ opacity:.45; }
+.bb-btn .cost{ display:block; font-size:11px; color:rgba(255,255,255,.8); }
+.bb-mini{
+  background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.2);
+  color:var(--paper);
+  border-radius:6px;
+  padding:6px 8px;
+  font-size:12px;
+  min-width:52px;
+}
+.bb-row2{
+  margin-top:6px;
+  display:flex;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.active-item{
+  background:rgba(201,162,39,.18);
+  border:1px solid var(--gold);
+  border-radius:8px;
+  padding:6px 10px;
+  font-size:13px;
+  color:var(--paper);
+  position:relative;
+  min-width:86px;
+}
+.active-item .uses{ position:absolute; top:1px; right:4px; font-size:11px; color:var(--gold); }
+.hero-combine{
+  background:rgba(201,162,39,.14);
+  border:1px solid var(--gold);
+  border-radius:8px;
+  padding:6px 8px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.hero-combine .hc-label{ font-size:12px; color:rgba(255,255,255,.7); }
+.hero-combine .hc-btn{ background:var(--gold); color:var(--ink); border-radius:5px; padding:3px 8px; font-size:13px; }
+
+/* 结算/暂停覆盖层 */
+.battle-overlay{
+  position:absolute;
+  inset:0;
+  z-index:20;
+  background:rgba(26,26,26,.4);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
