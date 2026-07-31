@@ -377,7 +377,7 @@ Game.UI = (function () {
     var meta = Game.State.state.meta;
     var card = openModal(
       '<div class="modal-title">招 募</div>' +
-      '<p style="text-align:center;font-size:15px;color:#c9a227">元宝 <b>' + meta.yuanbao + '</b></p>' +
+      '<p style="text-align:center;font-size:15px;color:#c9a227">元宝 <b id="rc-yuanbao">' + meta.yuanbao + '</b></p>' +
       '<p style="text-align:center;font-size:12px;color:#8a7d66;margin:6px 0">单抽 ' + CONFIG.GACHA.costSingle + ' · 十连 ' + CONFIG.GACHA.costTen + '<br>已有武将重复获得 → 信物（用于升星）</p>' +
       '<div class="result-actions" style="margin-bottom:10px">' +
         '<button class="ink-btn gold" id="rc-1">单 抽</button>' +
@@ -399,6 +399,8 @@ Game.UI = (function () {
     });
   }
   function showGachaResult(card, results) {
+    var yb = card.querySelector('#rc-yuanbao');
+    if (yb) yb.textContent = Game.State.state.meta.yuanbao;
     var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">';
     for (var i = 0; i < results.length; i++) {
       var r = results[i];
@@ -744,6 +746,10 @@ Game.UI = (function () {
     openShop: openShop,
     refreshShop: refreshShop,
     openCheat: openCheat,
+    openRecruit: openRecruit,
+    openHeroes: openHeroes,
+    openTrain: openTrain,
+    openDaily: openDaily,
     closeModal: closeModal,
     toast: toast
   };

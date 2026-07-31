@@ -341,7 +341,7 @@ Game.Battle = (function () {
     }
     // 换位
     S.units[k] = unit;
-    if (fromKey.charAt(0) === 'b') S.bench[+fromKey.slice(5)] = target;
+    if (fromKey.charAt(0) === 'b') S.bench[+fromKey.slice(1)] = target;
     else S.units[fromKey] = target;
     if (unit.kind === 'f') tryFormHero(b, S, c, r, unit);
     if (target.kind === 'f' && fromKey.charAt(0) !== 'b') {

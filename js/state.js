@@ -454,13 +454,14 @@ Game.State = (function () {
     return results;
   }
   function pullOne(meta) {
-    var rar = U.weightedPick(CONFIG.GACHA.rarityWeight);
+    var rar = +U.weightedPick(CONFIG.GACHA.rarityWeight);
     var pool = [];
     for (var k in DATA.HEROES) {
       var nm = DATA.HEROES[k].name;
       if ((DATA.HERO_RARITY[nm] || 1) === rar) pool.push(nm);
     }
     var name = U.pick(pool);
+    if (!name) { name = DATA.HEROES[U.pick(Object.keys(DATA.HEROES))].name; rar = DATA.HERO_RARITY[name] || 1; }
     var isNew = meta.heroes[name] === undefined;
     if (isNew) meta.heroes[name] = 0;
     else meta.keepsakes[name] = (meta.keepsakes[name] || 0) + 1;
