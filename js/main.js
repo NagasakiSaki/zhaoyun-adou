@@ -5,24 +5,35 @@
 
   function loop(ts) {
     requestAnimationFrame(loop);
-    if (!last) last = ts;
-    var dt = (ts - last) / 1000;
-    last = ts;
-    if (dt > 0.1) dt = 0.1;
-    Game.Effects.update(dt);
-    var st = Game.State.state;
-    if (st.battle) {
-      Game.Battle.update(st.battle, dt);
-      Game.Render.draw(st);
-      if (!st._hud || ts - st._hud > 120) {
-        st._hud = ts;
-        Game.UI.updateHud();
+    try {
+      if (!last) last = ts;
+      var dt = (ts - last) / 1000;
+      last = ts;
+      if (dt > 0.1) dt = 0.1;
+      Game.Effects.update(dt);
+      var st = Game.State.state;
+      if (st.battle) {
+        Game.Battle.update(st.battle, dt);
+        Game.Render.draw(st);
+        if (!st._hud || ts - st._hud > 120) {
+          st._hud = ts;
+          Game.UI.updateHud();
+        }
       }
+    } catch (e) {
+      // 任何一帧异常都不允许卡死游戏
+      if (window.__errCount) window.__errCount++; else window.__errCount = 1;
+      if (window.__errCount <= 5) console.error('[loop]', e);
     }
   }
 
   function boot() {
     try {
+      window.addEventListener('error', function (ev) {
+        var msg = ev && ev.message ? ev.message : '未知错误';
+        if (Game.UI && Game.UI.toast) Game.UI.toast('出错：' + msg);
+        console.error(ev);
+      });
       Game.Audio.init();
       Game.State.init();
       Game.UI.init();

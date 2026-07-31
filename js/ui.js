@@ -375,6 +375,17 @@ Game.UI = (function () {
     }
   }
 
+  function heroSkillText(h) {
+    if (!h) return '';
+    var p = '';
+    if (h.passive) {
+      var pn = DATA.PASSIVE_NAME[h.passive[0]] || '';
+      var pv = h.passive[0] === 'waveheal' ? h.passive[1] : Math.round(h.passive[1] * 100) + '%';
+      p = '｜被动·' + pn + pv;
+    }
+    return (h.skillName || '') + '·' + (h.skillDesc || '') + p;
+  }
+
   /* ================= 招募（抽卡） ================= */
   function openRecruit() {
     var meta = Game.State.state.meta;
@@ -435,7 +446,7 @@ Game.UI = (function () {
       html += '<div class="weapon-cell" data-name="' + name + '" style="cursor:pointer">' +
         '<div class="hero-seal" style="background:' + DATA.RARITY_COLOR[rarity] + '">' + name + '</div>' +
         '<div class="w-info"><div class="w-name">' + name + ' <span style="color:#ffd700;font-size:13px">' + '★'.repeat(stars) + '</span></div>' +
-        '<div class="w-tag">' + hero.desc + '</div></div>' +
+        '<div class="w-tag">' + heroSkillText(hero) + '</div></div>' +
         '<div class="w-info" style="text-align:right;flex:none">' +
           '<div class="w-tag">信物 ×' + keeps + '</div>' +
           '<button class="ink-btn" style="padding:4px 8px;font-size:13px">升星</button>' +
@@ -468,7 +479,7 @@ Game.UI = (function () {
     openModal(
       '<div class="modal-title">' + name + '</div>' +
       '<div style="text-align:center;font-size:20px;color:#ffd700;margin-bottom:6px">' + '★'.repeat(stars) + '</div>' +
-      '<p style="text-align:center;font-size:13px;color:#4a443d;margin-bottom:8px">' + hero.desc + ' · 信物 ×' + keeps + '</p>' +
+      '<p style="text-align:center;font-size:12px;color:#4a443d;margin-bottom:8px">' + heroSkillText(hero) + ' · 信物 ×' + keeps + '</p>' +
       tHtml +
       '<div class="result-actions" style="margin-top:10px">' +
         '<button class="ink-btn" id="hd-up">升星（消耗1信物）</button>' +
@@ -567,7 +578,7 @@ Game.UI = (function () {
     CONFIG.ACHIEVEMENTS.forEach(function (a) {
       var done = Game.State.achievementDone(a.key);
       var claimed = meta.achievements.claimed[a.key];
-      ahtml += '<div class="weapon-cell"><div class="w-info"><div class="w-name">' + a.name + '</div><div class="w-tag">' + a.desc + '</div></div>' +
+      ahtml += '<div class="weapon-cell"><div class="w-info"><div class="w-name">' + a.name + '</div><div class="w-tag">' + heroSkillText(a) + '</div></div>' +
         '<div class="w-info" style="text-align:right;flex:none"><div class="w-tag">元宝+' + a.reward[0] + '</div>' +
         (claimed ? '<div class="w-tag" style="color:#3f9d4f">已领取</div>' : (done ? '<button class="ink-btn" data-ak="' + a.key + '" style="padding:4px 8px;font-size:13px">领取</button>' : '<div class="w-tag">未达成</div>')) +
         '</div></div>';
@@ -693,7 +704,7 @@ Game.UI = (function () {
       var w = meta.weapons[h.name];
       html += '<div class="weapon-cell">' +
         '<div class="hero-seal">' + h.name + '</div>' +
-        '<div class="w-info"><div class="w-name">' + h.name + '</div><div class="w-tag">' + h.desc + '</div></div>' +
+        '<div class="w-info"><div class="w-name">' + h.name + '</div><div class="w-tag">' + heroSkillText(h) + '</div></div>' +
         '<div class="w-info" style="text-align:right;flex:none">' +
           (w ? '<div class="w-name" style="color:' + DATA.WEAPON_TIER_COLOR[w.tier] + '">' + w.name + '</div><div class="w-tag">' + DATA.WEAPON_TIER_NAME[w.tier] + '品</div>'
              : '<div class="w-tag">未持有神兵</div>') +

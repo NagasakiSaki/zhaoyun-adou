@@ -388,8 +388,20 @@ Game.State = (function () {
       coins: coins, xp: xp, stars: stars,
       mode: b.mode, stage: b.stage || 1, wave: b.wave, heartsLeft: b.P.hearts
     });
-    Game.UI.showResult(b);
+    try {
+      Game.UI.showResult(b);
+    } catch (e) {
+      console.error(e);
+      Game.UI.toast('结算弹窗异常：' + (e && e.message ? e.message : e));
+      Game.UI.openModal('<div class="modal-title">本局结束</div><div class="result-actions"><button class="ink-btn" id="res-home2">返回主页</button></div>');
+      var c = el2();
+      if (c) c.querySelector('#res-home2').addEventListener('click', function () { Game.UI.closeModal(); Game.State.goHome(); });
+    }
     Game.Audio.play(win ? 'win' : 'lose');
+  }
+  function el2() {
+    var r = document.getElementById('modal-root');
+    return r ? r.querySelector('.modal-card') : null;
   }
 
   function quitBattle() {

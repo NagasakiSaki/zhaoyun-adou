@@ -49,10 +49,12 @@ html, body{
   position:relative;
   overflow:hidden;
   background:
-    radial-gradient(ellipse at 20% -10%, rgba(0,0,0,.05), transparent 55%),
-    radial-gradient(ellipse at 90% 110%, rgba(0,0,0,.06), transparent 50%),
+    radial-gradient(ellipse at 18% -8%, rgba(168,59,45,.08), transparent 55%),
+    radial-gradient(ellipse at 88% 112%, rgba(59,74,107,.10), transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(255,255,255,.20), transparent 70%),
     repeating-linear-gradient(0deg, rgba(0,0,0,.012) 0 1px, transparent 1px 3px),
-    var(--paper);
+    repeating-linear-gradient(90deg, rgba(0,0,0,.008) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #f7f2e5, #efe6d0);
 }
 
 /* 桌面端居中列 */
@@ -95,19 +97,20 @@ button:focus{ outline:none; }
   justify-content:center;
   gap:6px;
   padding:10px 16px;
-  background:var(--ink);
+  background:linear-gradient(180deg, #3a342c, #161616);
   color:var(--paper);
   border-radius:var(--radius);
   font-size:16px;
   letter-spacing:2px;
-  box-shadow:var(--shadow), inset 0 0 0 1px rgba(255,255,255,.12);
-  transition:transform .08s, box-shadow .15s, background .15s;
+  box-shadow:0 3px 10px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.14);
+  transition:transform .08s, box-shadow .15s, filter .15s;
 }
+.ink-btn:hover{ filter:brightness(1.12); }
 .ink-btn:active{ transform:translateY(2px) scale(.97); box-shadow:0 1px 3px rgba(0,0,0,.3); }
-.ink-btn.secondary{ background:transparent; color:var(--ink); box-shadow:inset 0 0 0 2px var(--ink); }
-.ink-btn.cinnabar{ background:var(--cinnabar); }
-.ink-btn.gold{ background:var(--gold); color:var(--ink); }
-.ink-btn:disabled{ opacity:.45; cursor:not-allowed; transform:none; }
+.ink-btn.secondary{ background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.02)); color:var(--ink); box-shadow:inset 0 0 0 2px var(--ink2), 0 2px 6px rgba(0,0,0,.10); }
+.ink-btn.cinnabar{ background:linear-gradient(180deg, #c1492f, #8a2f20); }
+.ink-btn.gold{ background:linear-gradient(180deg, #e8c95a, #b8860b); color:#3a2a05; box-shadow:0 3px 12px rgba(184,134,11,.4), inset 0 0 0 1px rgba(255,255,255,.35); }
+.ink-btn:disabled{ opacity:.45; cursor:not-allowed; transform:none; filter:none; }
 
 /* 标牌小字 */
 .tag{

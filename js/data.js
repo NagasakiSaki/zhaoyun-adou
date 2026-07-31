@@ -10,36 +10,37 @@ window.DATA = {
   },
 
   // ---- 武将：征兵抽金色单字碎片，拖到相邻格拼姓名觉醒（首字左、尾字右） ----
+  // skill: 专属技能机制；skillName/skillDesc 展示；passive: [类型, 数值] 专属被动
   HEROES: {
-    zhaoyun:  { name: '赵云', recipe: ['赵', '云'], dmg: 95,  itv: 0.70, range: 3.2, skill: 'pierce',  desc: '龙胆·贯穿直线' },
-    guanyu:   { name: '关羽', recipe: ['关', '羽'], dmg: 85,  itv: 0.90, range: 2.2, skill: 'sweep',   desc: '青龙·横扫前方' },
-    zhangfei: { name: '张飞', recipe: ['张', '飞'], dmg: 75,  itv: 1.20, range: 2.0, skill: 'stun',    desc: '当阳·范围眩晕' },
-    machao:   { name: '马超', recipe: ['马', '超'], dmg: 135, itv: 1.30, range: 2.4, skill: 'smash',   desc: '神威·重击单敌' },
-    huangzhong: { name: '黄忠', recipe: ['黄', '忠'], dmg: 55, itv: 0.40, range: 4.5, skill: 'snipe',  desc: '百步·超远速射' },
-    lübu:     { name: '吕布', recipe: ['吕', '布'], dmg: 150, itv: 1.40, range: 2.0, skill: 'smash',   desc: '无双·天下第一' },
-    caocao:   { name: '曹操', recipe: ['曹', '操'], dmg: 65,  itv: 1.10, range: 3.5, skill: 'volley',  desc: '乱世·全屏斩击' },
-    liubei:   { name: '刘备', recipe: ['刘', '备'], dmg: 30,  itv: 1.00, range: 2.5, skill: 'aura',    desc: '仁德·友军增伤' },
-    zhangliao:{ name: '张辽', recipe: ['张', '辽'], dmg: 70,  itv: 0.95, range: 2.2, skill: 'sweep',   desc: '威震·横扫' },
-    xuchu:    { name: '许褚', recipe: ['许', '褚'], dmg: 95,  itv: 1.20, range: 1.8, skill: 'smash',   desc: '虎痴·重击' },
-    dianwei:  { name: '典韦', recipe: ['典', '韦'], dmg: 80,  itv: 1.10, range: 1.8, skill: 'fortify', desc: '恶来·铁壁强攻' },
-    zhouyu:   { name: '周瑜', recipe: ['周', '瑜'], dmg: 60,  itv: 1.20, range: 3.2, skill: 'volley',  desc: '公瑾·火计全屏' },
-    sunce:    { name: '孙策', recipe: ['孙', '策'], dmg: 90,  itv: 1.20, range: 2.0, skill: 'smash',   desc: '小霸王·重击' },
-    sunquan:  { name: '孙权', recipe: ['孙', '权'], dmg: 28,  itv: 1.00, range: 2.5, skill: 'aura',    desc: '仲谋·友军增伤' },
-    luxun:    { name: '陆逊', recipe: ['陆', '逊'], dmg: 55,  itv: 1.10, range: 3.0, skill: 'slow',    desc: '儒将·范围减速' },
-    lvmeng:   { name: '吕蒙', recipe: ['吕', '蒙'], dmg: 60,  itv: 1.30, range: 1.9, skill: 'stun',    desc: '白衣·范围眩晕' },
-    ganning:  { name: '甘宁', recipe: ['甘', '宁'], dmg: 70,  itv: 0.90, range: 2.6, skill: 'pierce',  desc: '锦帆·贯穿' },
-    jiangwei: { name: '姜维', recipe: ['姜', '维'], dmg: 65,  itv: 0.95, range: 2.8, skill: 'pierce',  desc: '幼麟·贯穿' },
-    dengai:   { name: '邓艾', recipe: ['邓', '艾'], dmg: 50,  itv: 0.50, range: 4.2, skill: 'snipe',   desc: '阴平·超远速射' },
-    guojia:   { name: '郭嘉', recipe: ['郭', '嘉'], dmg: 50,  itv: 1.10, range: 3.2, skill: 'slow',    desc: '鬼才·范围减速' },
-    pangtong: { name: '庞统', recipe: ['庞', '统'], dmg: 55,  itv: 1.20, range: 3.0, skill: 'volley',  desc: '凤雏·落凤全屏' },
-    huanggai: { name: '黄盖', recipe: ['黄', '盖'], dmg: 45,  itv: 1.20, range: 1.6, skill: 'fortify', desc: '苦肉·铁壁强攻' },
-    weiyan:   { name: '魏延', recipe: ['魏', '延'], dmg: 75,  itv: 1.20, range: 2.0, skill: 'smash',   desc: '文长·重击' },
-    zhangjiao:{ name: '张角', recipe: ['张', '角'], dmg: 55,  itv: 1.30, range: 2.0, skill: 'stun',    desc: '天公·范围眩晕' },
-    dongzhuo: { name: '董卓', recipe: ['董', '卓'], dmg: 80,  itv: 1.30, range: 1.8, skill: 'smash',   desc: '太师·重击' },
-    yuanshao: { name: '袁绍', recipe: ['袁', '绍'], dmg: 50,  itv: 1.20, range: 3.0, skill: 'volley',  desc: '四世·全屏斩击' },
-    huatuo:   { name: '华佗', recipe: ['华', '佗'], dmg: 25,  itv: 1.10, range: 2.5, skill: 'aura',    desc: '神医·友军增伤' },
-    zhenji:   { name: '甄姬', recipe: ['甄', '姬'], dmg: 45,  itv: 1.00, range: 3.0, skill: 'slow',    desc: '洛神·范围减速' },
-    diaochan: { name: '貂蝉', recipe: ['貂', '蝉'], dmg: 40,  itv: 1.00, range: 2.8, skill: 'slow',    desc: '闭月·范围减速' }
+    zhaoyun:  { name: '赵云', recipe: ['赵', '云'], dmg: 95,  itv: 0.70, range: 3.2, skill: 'pierce', skillName: '龙胆贯穿', skillDesc: '沿直线贯穿3敌', passive: ['spd', 0.15] },
+    guanyu:   { name: '关羽', recipe: ['关', '羽'], dmg: 85,  itv: 0.90, range: 2.2, skill: 'sweep', skillName: '青龙偃月', skillDesc: '横扫前方扇面', passive: ['crit', 0.20] },
+    zhangfei: { name: '张飞', recipe: ['张', '飞'], dmg: 75,  itv: 1.20, range: 2.0, skill: 'stun', skillName: '当阳怒吼', skillDesc: '范围怒吼眩晕', passive: ['atk', 0.15] },
+    machao:   { name: '马超', recipe: ['马', '超'], dmg: 135, itv: 1.30, range: 2.4, skill: 'smash', skillName: '神威天降', skillDesc: '重击单敌2倍', passive: ['spd', 0.20] },
+    huangzhong: { name: '黄忠', recipe: ['黄', '忠'], dmg: 55, itv: 0.40, range: 4.5, skill: 'snipe', skillName: '百步穿杨', skillDesc: '超远距离速射', passive: ['range', 0.15] },
+    lübu:     { name: '吕布', recipe: ['吕', '布'], dmg: 150, itv: 1.40, range: 2.0, skill: 'smash', skillVal: 2.5, skillName: '无双乱舞', skillDesc: '重击单敌2.5倍', passive: ['atk', 0.20] },
+    caocao:   { name: '曹操', recipe: ['曹', '操'], dmg: 65,  itv: 1.10, range: 3.5, skill: 'volley', skillName: '乱世枭雄', skillDesc: '全屏斩击', passive: ['income', 0.30] },
+    liubei:   { name: '刘备', recipe: ['刘', '备'], dmg: 30,  itv: 1.00, range: 2.5, skill: 'aura', skillName: '仁德之辉', skillDesc: '友军攻击+20%', passive: ['waveheal', 1] },
+    zhangliao:{ name: '张辽', recipe: ['张', '辽'], dmg: 70,  itv: 0.95, range: 2.2, skill: 'sweep', skillName: '威震逍遥', skillDesc: '横扫前方扇面', passive: ['spd', 0.10] },
+    xuchu:    { name: '许褚', recipe: ['许', '褚'], dmg: 95,  itv: 1.20, range: 1.8, skill: 'smash', skillName: '虎痴蛮力', skillDesc: '重击单敌1.8倍', passive: ['atk', 0.10] },
+    dianwei:  { name: '典韦', recipe: ['典', '韦'], dmg: 80,  itv: 1.10, range: 1.8, skill: 'fortify', skillName: '恶来守护', skillDesc: '重击+友军增伤', passive: ['spd', 0.10] },
+    zhouyu:   { name: '周瑜', recipe: ['周', '瑜'], dmg: 60,  itv: 1.20, range: 3.2, skill: 'burn', skillName: '火烧赤壁', skillDesc: '全屏灼烧持续伤害', passive: ['spd', 0.10] },
+    sunce:    { name: '孙策', recipe: ['孙', '策'], dmg: 90,  itv: 1.20, range: 2.0, skill: 'smash', skillName: '小霸王', skillDesc: '重击单敌1.8倍', passive: ['range', 0.10] },
+    sunquan:  { name: '孙权', recipe: ['孙', '权'], dmg: 28,  itv: 1.00, range: 2.5, skill: 'aura', skillName: '坐断东南', skillDesc: '友军攻击+12%', passive: ['income', 0.20] },
+    luxun:    { name: '陆逊', recipe: ['陆', '逊'], dmg: 55,  itv: 1.10, range: 3.0, skill: 'slow', skillName: '火烧连营', skillDesc: '范围减速', passive: ['spd', 0.10] },
+    lvmeng:   { name: '吕蒙', recipe: ['吕', '蒙'], dmg: 60,  itv: 1.30, range: 1.9, skill: 'stun', skillName: '白衣渡江', skillDesc: '范围眩晕', passive: ['crit', 0.10] },
+    ganning:  { name: '甘宁', recipe: ['甘', '宁'], dmg: 70,  itv: 0.90, range: 2.6, skill: 'chain', skillName: '锦帆弹射', skillDesc: '弹射2个敌人', passive: ['spd', 0.15] },
+    jiangwei: { name: '姜维', recipe: ['姜', '维'], dmg: 65,  itv: 0.95, range: 2.8, skill: 'pierce', skillName: '麒麟刺', skillDesc: '沿直线贯穿3敌', passive: ['range', 0.10] },
+    dengai:   { name: '邓艾', recipe: ['邓', '艾'], dmg: 50,  itv: 0.50, range: 4.2, skill: 'snipe', skillName: '偷渡阴平', skillDesc: '超远速射', passive: ['spd', 0.10] },
+    guojia:   { name: '郭嘉', recipe: ['郭', '嘉'], dmg: 50,  itv: 1.10, range: 3.2, skill: 'freeze', skillName: '遗计定军', skillDesc: '范围冰冻定身', passive: ['crit', 0.15] },
+    pangtong: { name: '庞统', recipe: ['庞', '统'], dmg: 55,  itv: 1.20, range: 3.0, skill: 'mark', skillName: '连环计', skillDesc: '标记易伤+40%', passive: ['spd', 0.10] },
+    huanggai: { name: '黄盖', recipe: ['黄', '盖'], dmg: 45,  itv: 1.20, range: 1.6, skill: 'fortify', skillName: '苦肉诈降', skillDesc: '重击+友军增伤', passive: ['atk', 0.10] },
+    weiyan:   { name: '魏延', recipe: ['魏', '延'], dmg: 75,  itv: 1.20, range: 2.0, skill: 'smash', skillName: '子午奇袭', skillDesc: '重击单敌1.8倍', passive: ['crit', 0.15] },
+    zhangjiao:{ name: '张角', recipe: ['张', '角'], dmg: 55,  itv: 1.30, range: 2.0, skill: 'stun', skillName: '天公将军', skillDesc: '范围眩晕', passive: ['spd', 0.10] },
+    dongzhuo: { name: '董卓', recipe: ['董', '卓'], dmg: 80,  itv: 1.30, range: 1.8, skill: 'smash', skillName: '暴虐无道', skillDesc: '重击单敌2倍', passive: ['atk', 0.15] },
+    yuanshao: { name: '袁绍', recipe: ['袁', '绍'], dmg: 50,  itv: 1.20, range: 3.0, skill: 'volley', skillName: '四世三公', skillDesc: '全屏斩击', passive: ['income', 0.15] },
+    huatuo:   { name: '华佗', recipe: ['华', '佗'], dmg: 25,  itv: 1.10, range: 2.5, skill: 'aura', skillName: '青囊济世', skillDesc: '友军攻击+10%', passive: ['spdAll', 0.05] },
+    zhenji:   { name: '甄姬', recipe: ['甄', '姬'], dmg: 45,  itv: 1.00, range: 3.0, skill: 'slow', skillName: '洛神赋', skillDesc: '范围减速', passive: ['crit', 0.10] },
+    diaochan: { name: '貂蝉', recipe: ['貂', '蝉'], dmg: 40,  itv: 1.00, range: 2.8, skill: 'multishot', skillName: '闭月连弩', skillDesc: '一次连射3发', passive: ['spd', 0.10] }
   },
 
   // 根据首字+尾字查武将（自由组合判定）
@@ -59,6 +60,7 @@ window.DATA = {
     '黄盖': 2, '张角': 2, '董卓': 2, '袁绍': 2, '华佗': 2, '甄姬': 2, '貂蝉': 2
   },
   RARITY_NAME: { 1: '绿', 2: '蓝', 3: '紫', 4: '金' },
+  PASSIVE_NAME: { atk: '攻击+', spd: '攻速+', range: '射程+', crit: '暴击+', income: '馒头收入+', waveheal: '每波阿斗回心+', spdAll: '全队攻速+' },
   RARITY_COLOR: { 1: '#3f9d4f', 2: '#2f6fd0', 3: '#7a4fb0', 4: '#d9a93b' },
 
   // 武将星级特性（C2/C4/C6 解锁，展示用）
@@ -71,7 +73,12 @@ window.DATA = {
     aura: { c2: '光环效果+10%', c4: '射程+15%', c6: '光环再+20%' },
     volley: { c2: '全屏伤害+10%', c4: '射程+15%', c6: '全屏再+20%伤害' },
     slow: { c2: '减速伤害+10%', c4: '射程+15%', c6: '减速再+20%伤害' },
-    fortify: { c2: '重击伤害+10%', c4: '射程+15%', c6: '重击再+20%伤害' }
+    fortify: { c2: '重击伤害+10%', c4: '射程+15%', c6: '重击再+20%伤害' },
+    burn: { c2: '灼烧伤害+10%', c4: '射程+15%', c6: '灼烧再+20%伤害' },
+    chain: { c2: '弹射伤害+10%', c4: '射程+15%', c6: '弹射+1个目标' },
+    freeze: { c2: '冰冻伤害+10%', c4: '射程+15%', c6: '冰冻再+20%伤害' },
+    mark: { c2: '标记易伤+10%', c4: '射程+15%', c6: '易伤再+20%' },
+    multishot: { c2: '连射伤害+10%', c4: '射程+15%', c6: '连射+1发' }
   },
 
   // 碎片字权重

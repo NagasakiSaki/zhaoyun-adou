@@ -111,6 +111,8 @@ Game.Battle = (function () {
     if (u.kind === 'g') {
       var h = heroByName(u.name);
       if (!h) return { inert: true };
+      var passive = h.passive || null;
+      var passVal = passive ? passive[1] : 0;
       var stars = (b && b.heroStars && b.heroStars[u.name]) || 0;
       var dmg = h.dmg * dmgMul;
       if (side === 'P' && b.weapons[u.name]) dmg += DATA.WEAPONS[b.weapons[u.name].tier].dmg;
@@ -124,7 +126,18 @@ Game.Battle = (function () {
       if (u.lv) itv *= CONFIG.GEN_LV_ITV_MUL(u.lv);
       var range = h.range;
       if (stars >= 4) range *= 1.15;
-      return { dmg: Math.round(dmg), itv: itv, range: range, skill: h.skill, hero: true, name: u.name, stars: stars };
+      var crit = 0;
+      if (passive) {
+        if (passive[0] === 'atk') dmg *= (1 + passVal);
+        else if (passive[0] === 'spd') itv *= (1 - passVal);
+        else if (passive[0] === 'range') range *= (1 + passVal);
+        else if (passive[0] === 'crit') crit = passVal;
+      }
+      return {
+        dmg: Math.round(dmg), itv: itv, range: range, skill: h.skill,
+        skillName: h.skillName, skillDesc: h.skillDesc, skillVal: h.skillVal || 1.6,
+        hero: true, name: u.name, stars: stars, crit: crit, passive: passive
+      };
     }
     return { inert: true };
   }
@@ -451,9 +464,10 @@ Game.Battle = (function () {
     if (b.waveState === 'fighting' && !b.enemies.length) {
       b.waveState = 'cleared';
       var bonus = (CONFIG.ECON.waveBonus(b.wave) + b.farmerIncome) * ((b._waveBonusMul) || 1);
-      b.P.mantou += bonus;
-      if (!b.solo) b.E.mantou += bonus;
+      b.P.mantou += Math.round(bonus * sideIncomeMul(b, 'P'));
+      if (!b.solo) b.E.mantou += Math.round(bonus * sideIncomeMul(b, 'E'));
       if (b.P.hearts < CONFIG.ECON.hearts) b.P.hearts += 1;
+      if (hasWaveheal(b, 'P') && b.P.hearts < CONFIG.ECON.hearts) b.P.hearts += 1;
       Game.UI.toast('第 ' + b.wave + ' 波告破 · 犒赏 ' + bonus + ' 馒头');
       Game.Audio.play('coin');
       if (b.wave >= b.maxWave) { endBattle(b, true); return; }
@@ -502,6 +516,16 @@ Game.Battle = (function () {
       var p1 = pts[e.seg], p2 = pts[Math.min(e.seg + 1, pts.length - 1)];
       e.x = p1[0] + (p2[0] - p1[0]) * e.segT;
       e.y = p1[1] + (p2[1] - p1[1]) * e.segT;
+      // 灼烧 DoT（周瑜/陆逊）
+      if (e.burnUntil && e.burnUntil > b.time) {
+        e.burnTick = (e.burnTick || 0) - dt;
+        if (e.burnTick <= 0) {
+          e.burnTick = 0.5;
+          e.hp -= (e.burnDmg || 0);
+          Game.Effects.hit(e.x, e.y);
+          if (e.hp <= 0) { e.hp = 0; kill(b, e, null); }
+        }
+      }
       if (e.seg >= pts.length - 1) {
         e.dead = true;
         var S = e.side === 'P' ? b.P : b.E;
@@ -535,6 +559,7 @@ Game.Battle = (function () {
   function damage(b, e, dmg, opt, src) {
     if (e.dead) return;
     opt = opt || {};
+    if (e.markUntil && e.markUntil > b.time) dmg = Math.round(dmg * 1.4);
     e.hp -= dmg;
     e.flashT = 0.1;
     if (opt.stun) e.stunT = Math.max(e.stunT, opt.stun);
@@ -545,7 +570,7 @@ Game.Battle = (function () {
   function kill(b, e, src) {
     e.dead = true;
     var S = e.side === 'P' ? b.P : b.E;
-    S.mantou += e.mantou;
+    S.mantou += Math.round(e.mantou * sideIncomeMul(b, S === b.P ? 'P' : 'E'));
     if (e.side === 'P') b.P.kills = (b.P.kills || 0) + 1;
     Game.Effects.kill(e.x, e.y, !!e.boss);
     Game.Effects.text(e.x, e.y - 0.5, '+' + e.mantou, '#c9a227');
@@ -566,10 +591,38 @@ Game.Battle = (function () {
     }
   }
 
+  function sideSpdMul(b, side) {
+    var S = side === 'P' ? b.P : b.E;
+    var m = 1;
+    for (var k in S.units) {
+      var u = S.units[k];
+      if (u.kind === 'g') { var h = heroByName(u.name); if (h && h.passive && h.passive[0] === 'spdAll') m *= (1 - h.passive[1]); }
+    }
+    return m;
+  }
+  function sideIncomeMul(b, side) {
+    var S = side === 'P' ? b.P : b.E;
+    var m = 1;
+    for (var k in S.units) {
+      var u = S.units[k];
+      if (u.kind === 'g') { var h = heroByName(u.name); if (h && h.passive && h.passive[0] === 'income') m += h.passive[1]; }
+    }
+    return m;
+  }
+  function hasWaveheal(b, side) {
+    var S = side === 'P' ? b.P : b.E;
+    for (var k in S.units) {
+      var u = S.units[k];
+      if (u.kind === 'g') { var h = heroByName(u.name); if (h && h.passive && h.passive[0] === 'waveheal') return true; }
+    }
+    return false;
+  }
+
   function updateSide(b, side, dt) {
     var S = side === 'P' ? b.P : b.E;
     var enemies = enemiesOf(b, side);
     var aura = auraOf(b, side);
+    var spdMul = sideSpdMul(b, side);
     for (var k in S.units) {
       var u = S.units[k];
       var st = unitStats(u, side, b);
@@ -582,8 +635,9 @@ Game.Battle = (function () {
       var cr = k.split('_');
       var px = +cr[0] + 0.5, py = +cr[1] + 0.5;
       var range = st.range;
-      var dmg = Math.round(st.dmg * aura);
-      var atkSpeedBuff = b._atkSpeedBuff && b.time < b._atkSpeedBuff;
+      var dmg = Math.round(st.dmg * aura * (st.crit && Math.random() < st.crit ? 1.5 : 1));
+      var itv = st.itv * spdMul;
+      if (b._atkSpeedBuff && b.time < b._atkSpeedBuff) itv *= 0.6;
 
       // 技能分支
       if (st.skill === 'stun') {
@@ -591,7 +645,7 @@ Game.Battle = (function () {
         for (var i = 0; i < enemies.length; i++) {
           if (Math.hypot(enemies[i].x - px, enemies[i].y - py) <= range) { damage(b, enemies[i], dmg, { stun: 1.0 }, u); hitAny = true; }
         }
-        if (hitAny) { u.cd = st.itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#a83b2d', 2); }
+        if (hitAny) { u.cd = itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#a83b2d', 2); }
         else u.cd = 0.08;
         continue;
       }
@@ -600,14 +654,42 @@ Game.Battle = (function () {
         for (var sl = 0; sl < enemies.length; sl++) {
           if (Math.hypot(enemies[sl].x - px, enemies[sl].y - py) <= range) { damage(b, enemies[sl], dmg, { slow: 1.5 }, u); hitSlow = true; }
         }
-        if (hitSlow) { u.cd = st.itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#3b4a6b', 2); }
+        if (hitSlow) { u.cd = itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#3b4a6b', 2); }
         else u.cd = 0.08;
+        continue;
+      }
+      if (st.skill === 'freeze') {
+        var hitFz = false;
+        for (var fz = 0; fz < enemies.length; fz++) {
+          if (Math.hypot(enemies[fz].x - px, enemies[fz].y - py) <= range) { damage(b, enemies[fz], dmg, { slow: 0.25, stun: 0.6 }, u); hitFz = true; }
+        }
+        if (hitFz) { u.cd = itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#6ab0d0', 2); }
+        else u.cd = 0.08;
+        continue;
+      }
+      if (st.skill === 'burn') {
+        var hitBr = false;
+        for (var br = 0; br < enemies.length; br++) {
+          var eBr = enemies[br];
+          if (Math.hypot(eBr.x - px, eBr.y - py) <= range) { damage(b, eBr, dmg, null, u); eBr.burnUntil = b.time + 3; eBr.burnDmg = Math.round(dmg * 0.5); hitBr = true; }
+        }
+        if (hitBr) { u.cd = itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#e0502a', 2.2); }
+        else u.cd = 0.08;
+        continue;
+      }
+      if (st.skill === 'mark') {
+        var tM = mostAdvanced(enemies, px, py, range);
+        if (!tM) { u.cd = 0.08; continue; }
+        u.cd = itv; syncAttackT(b, S, u, 0.35);
+        tM.markUntil = b.time + 4;
+        damage(b, tM, dmg, null, u);
+        Game.Effects.burst(tM.x, tM.y, '#e0c020', 1.6);
         continue;
       }
       if (st.skill === 'pierce') {
         var t0 = mostAdvanced(enemies, px, py, range);
         if (!t0) { u.cd = 0.08; continue; }
-        u.cd = st.itv; syncAttackT(b, S, u, 0.35);
+        u.cd = itv; syncAttackT(b, S, u, 0.35);
         var ang = Math.atan2(t0.y - py, t0.x - px);
         Game.Effects.slash(px, py, '#1a1a1a');
         for (var j = 0; j < enemies.length; j++) {
@@ -625,23 +707,54 @@ Game.Battle = (function () {
         for (var k2 = 0; k2 < enemies.length; k2++) {
           if (Math.hypot(enemies[k2].x - px, enemies[k2].y - py) <= range) { damage(b, enemies[k2], dmg, null, u); hitAny2 = true; }
         }
-        if (hitAny2) { u.cd = st.itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#c9a227', 2.2); }
+        if (hitAny2) { u.cd = itv; syncAttackT(b, S, u, 0.35); Game.Effects.burst(px, py, '#c9a227', 2.2); }
         else u.cd = 0.08;
         continue;
       }
       if (st.skill === 'smash' || st.skill === 'fortify') {
         var t1 = mostAdvanced(enemies, px, py, range);
         if (!t1) { u.cd = 0.08; continue; }
-        u.cd = st.itv; syncAttackT(b, S, u, 0.35);
-        damage(b, t1, Math.round(dmg * 1.6), null, u);
+        u.cd = itv; syncAttackT(b, S, u, 0.35);
+        damage(b, t1, Math.round(dmg * st.skillVal), null, u);
         Game.Effects.burst(t1.x, t1.y, '#a83b2d', 1.6);
+        continue;
+      }
+      if (st.skill === 'chain') {
+        var tC = mostAdvanced(enemies, px, py, range);
+        if (!tC) { u.cd = 0.08; continue; }
+        u.cd = itv; syncAttackT(b, S, u, 0.35);
+        damage(b, tC, dmg, null, u);
+        Game.Effects.burst(tC.x, tC.y, '#c9a227', 1.3);
+        var best2 = null, bd2 = 999;
+        for (var ch = 0; ch < enemies.length; ch++) {
+          var e3 = enemies[ch];
+          if (e3 === tC || e3.hp <= 0) continue;
+          var d3 = Math.hypot(e3.x - tC.x, e3.y - tC.y);
+          if (d3 < bd2) { bd2 = d3; best2 = e3; }
+        }
+        if (best2) { damage(b, best2, Math.round(dmg * 0.7), null, u); Game.Effects.burst(best2.x, best2.y, '#c9a227', 1); }
+        continue;
+      }
+      if (st.skill === 'multishot') {
+        var targets = [];
+        for (var ms = 0; ms < enemies.length && targets.length < 3; ms++) {
+          var e4 = enemies[ms];
+          if (Math.hypot(e4.x - px, e4.y - py) <= range) targets.push(e4);
+        }
+        if (!targets.length) { u.cd = 0.08; continue; }
+        u.cd = itv; syncAttackT(b, S, u, 0.35);
+        for (var m2 = 0; m2 < targets.length; m2++) {
+          if (b.bullets.length < CONFIG.MAX_BULLETS) {
+            b.bullets.push({ x: px, y: py, target: targets[m2], spd: 12, dmg: Math.round(dmg * 0.6), src: u, arrow: true, gold: true, ang: 0, shape: 'hero' });
+          }
+        }
         continue;
       }
 
       // 普通攻击（含 snipe 超远速射）
       var target = mostAdvanced(enemies, px, py, range);
       if (!target) { u.cd = 0.08; continue; }
-      u.cd = (atkSpeedBuff ? st.itv * 0.6 : st.itv);
+      u.cd = itv;
       syncAttackT(b, S, u, 0.35);
       var snipe = st.skill === 'snipe';
       if (b.bullets.length < CONFIG.MAX_BULLETS) {
