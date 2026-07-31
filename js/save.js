@@ -38,10 +38,16 @@ Game.Save = (function () {
       playerLevel: 1, xp: 0,
       rank: 1, stars: 0,
       currentAvatar: 'default',
-      weapons: {},                 // heroKey -> {tier, name, type}
-      farmerLevel: 0,              // 农民被动：每级 +6 馒头/波
+      weapons: {},                 // 武将名 -> {tier, name}
+      farmerLevel: 0,              // 农民被动：每级 +3 馒头/波
+      yuanbao: 100,                // 元宝（抽卡货币）
+      heroes: { '刘备': 0, '关羽': 0, '张飞': 0 },   // 拥有武将 -> 星数(0~6)
+      keepsakes: {},               // 信物（重复抽到）: 武将名 -> 数量
+      training: { '刀': 0, '枪': 0, '弓': 0, '骑': 0 }, // 兵种局外训练等级
       dailyDate: '', dailyMapIndex: 0, dailyBuffKey: null,
       merchantDate: '', merchantItems: [],
+      daily: { date: '', progress: {}, claimed: {} }, // 每日任务
+      achievements: { claimed: {} }, // 成就
       offlineTS: Date.now(),
       sound: true,
       endlessBest: 0,

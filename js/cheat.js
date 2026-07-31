@@ -46,6 +46,14 @@ Game.Cheat = (function () {
     meta.coins += 5000;
     Game.Save.saveMeta(meta);
   }
+  function addYuanbao(meta, n) { meta.yuanbao = Math.max(0, (meta.yuanbao || 0) + n); Game.Save.saveMeta(meta); }
+  function unlockAllHeroes(meta) {
+    for (var k in DATA.HEROES) {
+      var nm = DATA.HEROES[k].name;
+      if (meta.heroes[nm] === undefined) meta.heroes[nm] = 0;
+    }
+    Game.Save.saveMeta(meta);
+  }
 
   return {
     settings: settings,
@@ -54,6 +62,8 @@ Game.Cheat = (function () {
     addCoins: addCoins,
     maxWeapons: maxWeapons,
     levelUp: levelUp,
+    addYuanbao: addYuanbao,
+    unlockAllHeroes: unlockAllHeroes,
     offlineMul: function (meta) { return settings(meta).offlineMul || 1; }
   };
 })();

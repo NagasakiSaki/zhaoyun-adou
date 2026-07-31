@@ -2,9 +2,9 @@
 window.CONFIG = {
   VERSION: 1,
 
-  // 地图（参考版 8 列 × 10 行，上敌下半玩家，中央山脊分隔）
-  COLS: 8,
-  ROWS: 10,
+  // 地图（上敌下半玩家，中央山脊分隔）
+  COLS: 9,
+  ROWS: 14,
 
   BENCH_SIZE: 5,
   MAX_LV: 5,
@@ -13,6 +13,57 @@ window.CONFIG = {
   GEN_MAX_LV: 5,
   GEN_LV_DMG_MUL: function (lv) { return Math.pow(1.5, lv - 1); },
   GEN_LV_ITV_MUL: function (lv) { return Math.pow(0.85, lv - 1); },
+
+  // ---- 武将经验（局内杀敌自动晋级） ----
+  HERO_KILLS_NEED: function (lv) { return 3 + lv * 4; },
+
+  // ---- 局外抽卡（元宝） ----
+  GACHA: {
+    costSingle: 200,
+    costTen: 1800,
+    // 稀有度权重（rarity: 1绿 2蓝 3紫 4金）
+    rarityWeight: { 1: 55, 2: 28, 3: 13, 4: 4 }
+  },
+
+  // ---- 武将星级（命座） ----
+  STAR: {
+    max: 6,
+    dmgPerStar: 0.15,   // 每星 +15% 伤害
+    traitStars: [2, 4, 6]
+  },
+
+  // ---- 小兵局外训练 ----
+  TRAINING: {
+    maxLv: 20,
+    dmgPerLv: 0.10,
+    costBase: 100,
+    costMul: 1.6
+  },
+
+  // ---- 掉落 ----
+  DROP: {
+    yuanbaoStage: 50,      // 通关基础元宝
+    yuanbaoPerWave: 3,     // 每波少量元宝
+    bossKeepsakeChance: 0.25, // BOSS 掉信物概率
+    yuanbaoBoss: 30
+  },
+
+  // ---- 每日任务 / 成就 ----
+  DAILY: {
+    quests: [
+      { key: 'win', name: '通关主线 1 次', target: 1, reward: [60, 1000] },      // 元宝,金币
+      { key: 'kill', name: '消灭 50 名敌人', target: 50, reward: [80, 500] },
+      { key: 'gacha', name: '招募 1 次', target: 1, reward: [50, 300] },
+      { key: 'train', name: '训练 1 次', target: 1, reward: [40, 800] }
+    ]
+  },
+  ACHIEVEMENTS: [
+    { key: 'firstwin', name: '首次胜利', desc: '任意模式赢下一局', reward: [100, 2000] },
+    { key: 'hero10', name: '名将如云', desc: '拥有 10 名武将', reward: [200, 0] },
+    { key: 'star1', name: '初露锋芒', desc: '任意武将升到 1 星', reward: [150, 1000] },
+    { key: 'endless20', name: '无尽之巅', desc: '无尽打到 20 波', reward: [200, 2000] },
+    { key: 'tier5', name: '神兵初成', desc: '获得 5 品神兵', reward: [150, 1500] }
+  ],
 
   // 金手指默认设置（可被 meta.cheat 覆盖）
   CHEAT_DEFAULT: {

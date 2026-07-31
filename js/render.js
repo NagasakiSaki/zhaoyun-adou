@@ -227,6 +227,27 @@ Game.Render = (function () {
       ctx.textAlign = 'right'; ctx.textBaseline = 'top';
       ctx.fillText('Lv' + (u.lv || 1), half - cell * 0.05, -half + cell * 0.03);
     }
+    // 星级角标
+    if (isHero) {
+      var stars = (b.heroStars && b.heroStars[u.name]) || 0;
+      if (stars > 0) {
+        ctx.fillStyle = '#ffd700';
+        ctx.font = FONT(cell * 0.15, 700);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText('★'.repeat(Math.min(6, stars)), -half + cell * 0.04, -half + cell * 0.02);
+      }
+    }
+    // 经验条（武将半身0：杀敌自动晋级进度）
+    if (isHalf && u.half === 0 && (u.lv || 1) < CONFIG.GEN_MAX_LV) {
+      var need = CONFIG.HERO_KILLS_NEED(u.lv || 1);
+      var prog = Math.min(1, (u.kills || 0) / need);
+      var bw = size * 0.9, bh = Math.max(3, cell * 0.06);
+      var bx = -bw / 2, by = half + 4;
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      roundRect(bx, by, bw, bh, 2); ctx.fill();
+      ctx.fillStyle = '#c9a227';
+      roundRect(bx, by, Math.max(0, bw * prog), bh, 2); ctx.fill();
+    }
     ctx.restore();
   }
 

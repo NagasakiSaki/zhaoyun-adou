@@ -150,8 +150,15 @@ Game.UI = (function () {
         modeCard('endless', '∞', '无尽', '敌潮层层加码，守住阿斗红心', '最佳 ' + (st.slots.endless.progress.endlessBestWave || 0) + ' 波') +
         modeCard('arena', '战', '竞技', '与 AI 同受波次，先失守者败', (st.slots.arena.progress.arenaWins || 0) + '胜/' + (st.slots.arena.progress.arenaLosses || 0) + '负') +
       '</div>' +
+      '<div class="home-meta"><span class="meta-chip">元宝 <b style="color:#c9a227">' + meta.yuanbao + '</b></span></div>' +
+      '<div class="home-buttons main">' +
+        '<button class="ink-btn gold" data-act="recruit">招 募</button>' +
+        '<button class="ink-btn" data-act="heroes">武 将</button>' +
+        '<button class="ink-btn secondary" data-act="train">训 练</button>' +
+        '<button class="ink-btn secondary" data-act="daily">每日</button>' +
+      '</div>' +
       '<div class="home-buttons">' +
-        '<button class="ink-btn secondary" data-act="shop">神秘商人</button>' +
+        '<button class="ink-btn secondary" data-act="shop">商人</button>' +
         '<button class="ink-btn secondary" data-act="rank">军衔</button>' +
         '<button class="ink-btn secondary" data-act="bag">背包</button>' +
         '<button class="ink-btn secondary" data-act="cheat">金手指</button>' +
@@ -169,6 +176,10 @@ Game.UI = (function () {
       else if (act === 'cheat') openCheat();
       else if (act === 'help') openHelp();
       else if (act === 'sound') Game.State.toggleSound();
+      else if (act === 'recruit') openRecruit();
+      else if (act === 'heroes') openHeroes();
+      else if (act === 'train') openTrain();
+      else if (act === 'daily') openDaily();
     });
     var off = document.getElementById('offline-claim');
     if (off) off.addEventListener('click', function () { Game.State.claimOffline(); });
@@ -361,6 +372,170 @@ Game.UI = (function () {
     }
   }
 
+  /* ================= 招募（抽卡） ================= */
+  function openRecruit() {
+    var meta = Game.State.state.meta;
+    var card = openModal(
+      '<div class="modal-title">招 募</div>' +
+      '<p style="text-align:center;font-size:15px;color:#c9a227">元宝 <b>' + meta.yuanbao + '</b></p>' +
+      '<p style="text-align:center;font-size:12px;color:#8a7d66;margin:6px 0">单抽 ' + CONFIG.GACHA.costSingle + ' · 十连 ' + CONFIG.GACHA.costTen + '<br>已有武将重复获得 → 信物（用于升星）</p>' +
+      '<div class="result-actions" style="margin-bottom:10px">' +
+        '<button class="ink-btn gold" id="rc-1">单 抽</button>' +
+        '<button class="ink-btn gold" id="rc-10">十 连</button>' +
+      '</div>' +
+      '<div id="gacha-rates" style="font-size:12px;color:#8a7d66;text-align:center;margin-bottom:8px"></div>' +
+      '<div class="gacha-result" id="gacha-result"></div>'
+    );
+    var rates = '';
+    for (var r = 1; r <= 4; r++) rates += '<span style="color:' + DATA.RARITY_COLOR[r] + '">' + DATA.RARITY_NAME[r] + ' ' + CONFIG.GACHA.rarityWeight[r] + '%</span>　';
+    card.querySelector('#gacha-rates').innerHTML = '掉率：' + rates;
+    card.querySelector('#rc-1').addEventListener('click', function () {
+      var res = Game.State.gachaPull(1);
+      if (res) showGachaResult(card, res);
+    });
+    card.querySelector('#rc-10').addEventListener('click', function () {
+      var res = Game.State.gachaPull(10);
+      if (res) showGachaResult(card, res);
+    });
+  }
+  function showGachaResult(card, results) {
+    var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">';
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      var col = DATA.RARITY_COLOR[r.rarity];
+      html += '<div style="width:52px;height:60px;border-radius:8px;background:' + col + ';color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:16px;font-weight:bold">' + r.name + '<span style="font-size:9px;opacity:.8">' + (r.isNew ? 'NEW' : '信物') + '</span></div>';
+    }
+    html += '</div>';
+    card.querySelector('#gacha-result').innerHTML = html;
+  }
+
+  /* ================= 武将图鉴 / 升星 ================= */
+  function openHeroes() {
+    var meta = Game.State.state.meta;
+    var card = openModal('<div class="modal-title">武将 · 图鉴</div><div id="hero-list"></div>');
+    var list = card.querySelector('#hero-list');
+    var html = '';
+    var names = {};
+    for (var k in DATA.HEROES) names[DATA.HEROES[k].name] = true;
+    var owned = [];
+    for (var n in meta.heroes) if (names[n]) owned.push(n);
+    if (!owned.length) html = '<p style="text-align:center;color:#8a7d66">尚未拥有武将，去招募吧</p>';
+    for (var i = 0; i < owned.length; i++) {
+      var name = owned[i];
+      var stars = meta.heroes[name];
+      var keeps = meta.keepsakes[name] || 0;
+      var rarity = DATA.HERO_RARITY[name] || 1;
+      var hero = null;
+      for (var k2 in DATA.HEROES) if (DATA.HEROES[k2].name === name) hero = DATA.HEROES[k2];
+      html += '<div class="weapon-cell" data-name="' + name + '" style="cursor:pointer">' +
+        '<div class="hero-seal" style="background:' + DATA.RARITY_COLOR[rarity] + '">' + name + '</div>' +
+        '<div class="w-info"><div class="w-name">' + name + ' <span style="color:#ffd700;font-size:13px">' + '★'.repeat(stars) + '</span></div>' +
+        '<div class="w-tag">' + hero.desc + '</div></div>' +
+        '<div class="w-info" style="text-align:right;flex:none">' +
+          '<div class="w-tag">信物 ×' + keeps + '</div>' +
+          '<button class="ink-btn" style="padding:4px 8px;font-size:13px">升星</button>' +
+        '</div></div>';
+    }
+    list.innerHTML = html;
+    var rows = list.querySelectorAll('[data-name]');
+    for (var r2 = 0; r2 < rows.length; r2++) {
+      rows[r2].querySelector('button').addEventListener('click', function (e) {
+        e.stopPropagation();
+        Game.State.starUp(this.parentNode.parentNode.dataset.name);
+        openHeroes();
+      });
+      rows[r2].addEventListener('click', function () { showHeroDetail(this.dataset.name); });
+    }
+  }
+  function showHeroDetail(name) {
+    var meta = Game.State.state.meta;
+    var stars = meta.heroes[name];
+    var keeps = meta.keepsakes[name] || 0;
+    var hero = null;
+    for (var k in DATA.HEROES) if (DATA.HEROES[k].name === name) hero = DATA.HEROES[k];
+    if (!hero) return;
+    var traits = DATA.TRAITS[hero.skill];
+    var tHtml = '<p style="font-size:12px;color:#8a7d66;margin:6px 0">星级特性：</p>';
+    [2, 4, 6].forEach(function (s) {
+      var label = s === 2 ? 'C2' : (s === 4 ? 'C4' : 'C6');
+      tHtml += '<div style="font-size:13px;' + (stars >= s ? 'color:#c9a227' : 'color:#aaa') + '">' + label + '：' + (traits ? traits['c' + s] : '') + '</div>';
+    });
+    openModal(
+      '<div class="modal-title">' + name + '</div>' +
+      '<div style="text-align:center;font-size:20px;color:#ffd700;margin-bottom:6px">' + '★'.repeat(stars) + '</div>' +
+      '<p style="text-align:center;font-size:13px;color:#4a443d;margin-bottom:8px">' + hero.desc + ' · 信物 ×' + keeps + '</p>' +
+      tHtml +
+      '<div class="result-actions" style="margin-top:10px">' +
+        '<button class="ink-btn" id="hd-up">升星（消耗1信物）</button>' +
+      '</div>'
+    );
+    document.getElementById('hd-up').addEventListener('click', function () {
+      Game.State.starUp(name);
+      closeModal();
+      openHeroes();
+    });
+  }
+
+  /* ================= 兵种训练 ================= */
+  function openTrain() {
+    var meta = Game.State.state.meta;
+    var card = openModal('<div class="modal-title">兵种训练</div><div id="train-list"></div>' +
+      '<p style="font-size:12px;color:#8a7d66;margin-top:8px">每级该兵种伤害 +' + Math.round(CONFIG.TRAINING.dmgPerLv * 100) + '%，上限 ' + CONFIG.TRAINING.maxLv + ' 级。</p>');
+    var list = card.querySelector('#train-list');
+    var html = '';
+    ['刀', '枪', '弓', '骑'].forEach(function (ch) {
+      var lv = meta.training[ch] || 0;
+      var cost = lv >= CONFIG.TRAINING.maxLv ? 0 : Math.round(CONFIG.TRAINING.costBase * Math.pow(CONFIG.TRAINING.costMul, lv));
+      html += '<div class="weapon-cell"><div class="hero-seal">' + ch + '</div>' +
+        '<div class="w-info"><div class="w-name">' + DATA.SOLDIERS[ch].name + '</div><div class="w-tag">伤害+' + (lv * 10) + '% · Lv.' + lv + '</div></div>' +
+        '<div class="w-info" style="text-align:right;flex:none">' +
+          (lv >= CONFIG.TRAINING.maxLv ? '<div class="w-tag">已满级</div>' : '<button class="ink-btn" data-ch="' + ch + '" style="padding:5px 8px;font-size:13px">升级 ' + cost + '金币</button>') +
+        '</div></div>';
+    });
+    list.innerHTML = html;
+    var btns = list.querySelectorAll('[data-ch]');
+    for (var i = 0; i < btns.length; i++) btns[i].addEventListener('click', function () {
+      Game.State.trainUp(this.dataset.ch);
+      openTrain();
+    });
+  }
+
+  /* ================= 每日 / 成就 ================= */
+  function openDaily() {
+    var meta = Game.State.state.meta;
+    Game.State.resetDaily(meta);
+    var card = openModal('<div class="modal-title">每日 · 成就</div>' +
+      '<div class="panel-label">每日任务</div><div id="daily-list"></div>' +
+      '<div class="panel-label">成就</div><div id="ach-list"></div>');
+    var dl = card.querySelector('#daily-list');
+    var dhtml = '';
+    CONFIG.DAILY.quests.forEach(function (q) {
+      var prog = meta.daily.progress[q.key] || 0;
+      var done = prog >= q.target;
+      var claimed = meta.daily.claimed[q.key];
+      dhtml += '<div class="weapon-cell"><div class="w-info"><div class="w-name">' + q.name + '</div><div class="w-tag">' + Math.min(prog, q.target) + '/' + q.target + '</div></div>' +
+        '<div class="w-info" style="text-align:right;flex:none"><div class="w-tag">元宝+' + q.reward[0] + '</div>' +
+        (claimed ? '<div class="w-tag" style="color:#3f9d4f">已领取</div>' : (done ? '<button class="ink-btn" data-dq="' + q.key + '" style="padding:4px 8px;font-size:13px">领取</button>' : '<div class="w-tag">未完成</div>')) +
+        '</div></div>';
+    });
+    dl.innerHTML = dhtml;
+    var db = dl.querySelectorAll('[data-dq]');
+    for (var i = 0; i < db.length; i++) db[i].addEventListener('click', function () { Game.State.claimDaily(this.dataset.dq); openDaily(); });
+    var al = card.querySelector('#ach-list');
+    var ahtml = '';
+    CONFIG.ACHIEVEMENTS.forEach(function (a) {
+      var done = Game.State.achievementDone(a.key);
+      var claimed = meta.achievements.claimed[a.key];
+      ahtml += '<div class="weapon-cell"><div class="w-info"><div class="w-name">' + a.name + '</div><div class="w-tag">' + a.desc + '</div></div>' +
+        '<div class="w-info" style="text-align:right;flex:none"><div class="w-tag">元宝+' + a.reward[0] + '</div>' +
+        (claimed ? '<div class="w-tag" style="color:#3f9d4f">已领取</div>' : (done ? '<button class="ink-btn" data-ak="' + a.key + '" style="padding:4px 8px;font-size:13px">领取</button>' : '<div class="w-tag">未达成</div>')) +
+        '</div></div>';
+    });
+    al.innerHTML = ahtml;
+    var ab = al.querySelectorAll('[data-ak]');
+    for (var j = 0; j < ab.length; j++) ab[j].addEventListener('click', function () { Game.State.claimAchievement(this.dataset.ak); openDaily(); });
+  }
+
   /* ================= 金手指 ================= */
   function openCheat() {
     var meta = Game.State.state.meta;
@@ -393,6 +568,8 @@ Game.UI = (function () {
       '<div class="result-actions" style="margin-top:12px">' +
         '<button class="ink-btn" id="ch-save">保存设置</button>' +
         '<button class="ink-btn secondary" id="ch-coins">+1000金币</button>' +
+        '<button class="ink-btn secondary" id="ch-yuanbao">+1000元宝</button>' +
+        '<button class="ink-btn secondary" id="ch-unlock">全武将解锁</button>' +
         '<button class="ink-btn secondary" id="ch-weapons">武将全满配</button>' +
         '<button class="ink-btn secondary" id="ch-max">满级满军衔</button>' +
       '</div>'
@@ -419,6 +596,8 @@ Game.UI = (function () {
       closeModal();
     });
     card.querySelector('#ch-coins').addEventListener('click', function () { Game.Cheat.addCoins(meta, 1000); Game.UI.toast('金币 +1000'); openCheat(); });
+    card.querySelector('#ch-yuanbao').addEventListener('click', function () { Game.Cheat.addYuanbao(meta, 1000); Game.UI.toast('元宝 +1000'); openCheat(); });
+    card.querySelector('#ch-unlock').addEventListener('click', function () { Game.Cheat.unlockAllHeroes(meta); Game.UI.toast('已解锁全部武将'); openCheat(); });
     card.querySelector('#ch-weapons').addEventListener('click', function () { Game.Cheat.maxWeapons(meta); Game.UI.toast('武将全部满配神兵'); openCheat(); });
     card.querySelector('#ch-max').addEventListener('click', function () { Game.Cheat.levelUp(meta); Game.UI.toast('已满级满军衔'); openCheat(); });
   }
